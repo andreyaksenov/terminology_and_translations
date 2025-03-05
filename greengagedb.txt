@@ -1,0 +1,59 @@
+based on Greenplum - на основе Greenplum
+Greengage DB - не переводить
+Greengage DBMS - СУБД Greengage
+passphrase - парольная фраза
+host - хост
+master host - мастер-хост
+standby master host - резервный мастер-хост
+segment host - сегмент-хост
+firewall - межсетевой экран
+topic - статья
+section - раздел
+NIC bonding - объединение сетевых интерфейсов
+Interconnect network - Interconnect-сеть
+maximum transmission unit - максимальный размер блока передачи
+Transparent Huge Pages - не переводить
+read-ahead - опережающее чтение
+SSH key - SSH-ключ
+option - параметр
+endpoint security software - защитное программное обеспечение
+limit - лимит
+meta-command - метакоманда
+backend - бэкенд
+backup - бэкап
+bare metal - не переводить
+cache - кеш
+endpoint - эндпойнт
+hash - хеш
+IP address - IP-адрес
+open-source - с открытым исходным кодом
+pagination - пагинация
+snapshot - снепшот
+split-brain - не переводить
+tag - тег
+timeout - тайм-аут
+web application - веб-приложение
+web interface - веб-интерфейс
+SQL query - SQL-запрос
+TCP port - TCP-порт
+submodule - подмодуль
+directory - каталог
+Unix domain socket - сокет домена Unix
+connection - подключение
+CIDR notation - CIDR-нотация
+plain text - обычный текст
+Key distribution center - не переводить
+mapping - сопоставление
+default - по умолчанию
+realm - область (realm)
+principal - принципал
+fully qualified domain name - полное доменное имя
+private key - закрытый ключ
+log file - лог-файл
+primary segment - основной сегмент
+mirror segment - зеркальный сегмент
+top-level transaction - транзакция верхнего уровня
+subtransaction - подтранзакция
+slice - слайс (slice)
+severity - критичность
+stack strace - стек вызовов
