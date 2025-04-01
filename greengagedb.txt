@@ -57,3 +57,7 @@ subtransaction - подтранзакция
 slice - слайс (slice)
 severity - критичность
 stack strace - стек вызовов
+schema search path - путь поиска схемы
+session - сессия
+tablespace - табличное пространство
+clause - выражение
