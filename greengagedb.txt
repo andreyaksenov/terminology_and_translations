@@ -61,3 +61,12 @@ schema search path - путь поиска схемы
 session - сессия
 tablespace - табличное пространство
 clause - выражение
+partitioning - партиционирование
+unique constraint - ограничение уникальности
+not-null constraint - ограничение `NOT NULL`
+primary key constraint - ограничение первичного ключа
+check constraint - ограничение-проверка
+foreign key constraint - ограничение внешнего ключа
+relation - отношение (relation)
+heap table - heap-таблица
+TOAST table - TOAST-таблица
