@@ -70,3 +70,7 @@ foreign key constraint - ограничение внешнего ключа
 relation - отношение (relation)
 heap table - heap-таблица
 TOAST table - TOAST-таблица
+append-optimized table - оптимизированная для добавления (append-optimized, AO) таблица
+compression - сжатие
+partition - партиция (partition)
+subpartition - сабпартиция (subpartition)
