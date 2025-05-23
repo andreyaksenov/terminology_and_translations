@@ -72,5 +72,6 @@ heap table - heap-таблица
 TOAST table - TOAST-таблица
 append-optimized table - оптимизированная для добавления (append-optimized, AO) таблица
 compression - сжатие
-partition - партиция (partition)
-subpartition - сабпартиция (subpartition)
+partition - партиция
+subpartition - сабпартиция
+root partitioned table - родительская партиционированная таблица
