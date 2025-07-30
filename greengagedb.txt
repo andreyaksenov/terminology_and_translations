@@ -75,3 +75,7 @@ compression - сжатие
 partition - партиция
 subpartition - сабпартиция
 root partitioned table - родительская партиционированная таблица
+join - соединение
+product - товар
+breadth-first order - порядок "сначала в ширину" (breadth-first)
+depth-first order - порядок "сначала в глубину" (depth-first)
