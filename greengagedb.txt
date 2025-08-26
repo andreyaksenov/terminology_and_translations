@@ -75,6 +75,14 @@ compression - сжатие
 partition - партиция
 subpartition - сабпартиция
 root partitioned table - родительская партиционированная таблица
+staging table - staging-таблица
+serial type - последовательный тип
+bitmap index - bitmap-индекс
+B-tree index - индекс B-дерево
+indexes on expressions - индексы по выражениям
+multicolumn index - составной индекс
+cardinality - кардинальность
+an index on the column - индекс по столбцу
 join - соединение
 product - товар
 breadth-first order - порядок "сначала в ширину" (breadth-first)
