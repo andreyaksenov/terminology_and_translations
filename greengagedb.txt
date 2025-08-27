@@ -90,3 +90,4 @@ depth-first order - порядок "сначала в глубину" (depth-fir
 nested loop join - соединение с вложенным циклом
 merge join - соединение слиянием
 hash join - хеш-соединение
+partition elimination - сканирование ограниченного числа партиций (partition elimination)
