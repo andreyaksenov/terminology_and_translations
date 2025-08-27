@@ -89,3 +89,4 @@ breadth-first order - порядок "сначала в ширину" (breadth-f
 depth-first order - порядок "сначала в глубину" (depth-first)
 nested loop join - соединение с вложенным циклом
 merge join - соединение слиянием
+hash join - хеш-соединение
