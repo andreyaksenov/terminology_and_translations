@@ -92,3 +92,5 @@ merge join - соединение слиянием
 hash join - хеш-соединение
 partition elimination - сканирование ограниченного числа партиций (partition elimination)
 worker process - процесс-обработчик
+cross join - перекрестное соединение
+inner join - внутреннее соединение
