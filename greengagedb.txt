@@ -98,3 +98,5 @@ resource group - ресурсная группа
 resource queue - ресурсная очередь
 queued transaction - ожидающая в очереди транзакция
 workfile - spill-файл
+parallel retrieve cursor - параллельный курсор
+endpoint - конечная точка (endpoint)
