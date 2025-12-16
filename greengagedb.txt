@@ -10,7 +10,8 @@ firewall - межсетевой экран
 topic - статья
 section - раздел
 NIC bonding - объединение сетевых интерфейсов
-Interconnect network - Interconnect-сеть
+interconnect - интерконнект
+interconnect network - интерконнект-сеть
 maximum transmission unit - максимальный размер блока передачи
 Transparent Huge Pages - не переводить
 read-ahead - опережающее чтение
@@ -100,3 +101,12 @@ queued transaction - ожидающая в очереди транзакция
 workfile - spill-файл
 parallel retrieve cursor - параллельный курсор
 endpoint - конечная точка (endpoint)
+WAL sender - процесс отправки WAL
+write-ahead logging (WAL) - журнал предзаписи (WAL)
+content ID - идентификатор контента
+enum type - тип-перечисление
+web table - веб-таблица
+foreign-data wrapper - обертка сторонних данных
+foreign server - сторонний сервер
+selectivity - селективность
+backend - серверный процесс
