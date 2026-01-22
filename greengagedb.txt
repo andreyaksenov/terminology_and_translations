@@ -110,3 +110,9 @@ foreign-data wrapper - обертка сторонних данных
 foreign server - сторонний сервер
 selectivity - селективность
 backend - серверный процесс
+restricted mode - ограниченный (restricted) режим
+embedded SQL - встраиваемый SQL
+prepared statement - подготовленный оператор
+Global Deadlock Detector - процесс обнаружения взаимных блокировок (Global Deadlock Detector)
+readable table - читающая таблица
+writable table - пишущая таблица
