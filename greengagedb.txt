@@ -106,7 +106,7 @@ write-ahead logging (WAL) - журнал предзаписи (WAL)
 content ID - идентификатор контента
 enum type - тип-перечисление
 web table - веб-таблица
-foreign-data wrapper - обертка сторонних данных
+foreign data wrapper - обертка сторонних данных
 foreign server - сторонний сервер
 selectivity - селективность
 backend - серверный процесс
