@@ -46,7 +46,7 @@ Rules are grouped into seven **families**:
 | `refs`   | broken `xref:`/`include:`/`image:` targets, orphaned pages/partials/examples/images/tags |
 | `style`  | `ё`/`Ё`, un-italicized file paths, table-cell periods                                    |
 | `terms`  | EN term translated to a non-house-style RU word (glossary-driven)                        |
-| `l10n`   | line-count / structure / nav parity, untranslated lines, `examples/` parity              |
+| `l10n`   | line-count / structure / nav parity, link & literal parity, untranslated lines, `examples/` parity |
 | `links`  | external `http(s)` links — `404`, permanent redirect, dead host (network; opt-in)        |
 
 ```bash
@@ -135,6 +135,8 @@ rationales — the terminal equivalent of this section. `beta` rules are heurist
 | `LN03` | `check l10n --untranslated` | RU line still English |
 | `LN04` | `check l10n --examples` | EN/RU examples differ |
 | `LN05` | `check l10n --nav` | EN/RU nav differs |
+| `LN06` | `check l10n --links` | EN/RU reference different xref / image / URL targets |
+| `LN07` | `check l10n --literals` | EN/RU carry different back-ticked literals |
 | `LK01` | `check links` | dead / redirected / unreachable external links (404 fails; the rest are flagged) |
 
 Name the families you want to run — there's no "run everything" keyword. `links`
@@ -309,6 +311,35 @@ Needs a glossary: `--glossary PATH` (pipe-delimited `en|ru|ru_pattern|note`), or
   ```bash
   ./docs_tool.py check l10n --nav
   ./docs_tool.py check l10n --nav --verbose
+  ```
+
+- **`LN06` · `check l10n --links`** · beta — EN and RU must reference the same
+  targets: xref target *files*, inline `image:` targets, and external URLs. Link
+  text is translated and ignored — only the destination is compared. Catches a
+  cross-reference or link silently dropped in translation. Folded (deliberate
+  localisation, not reported): an xref `#fragment` (Antora derives it from the
+  translated heading), a `/en/`|`/ru/` URL path segment or `en.`/`ru.` host, a
+  Wikipedia article, an `_en`|`_ru` image-filename tag. Beta: a repo that
+  deliberately links its EN docs site from RU pages, or writes an xref sometimes
+  module-qualified and sometimes not, shows up here. `--verbose` lists every hit as a clickable `path:line`.
+  ```bash
+  ./docs_tool.py check l10n --links
+  ./docs_tool.py check l10n --links --page resource_groups.adoc
+  ./docs_tool.py check l10n --links --verbose
+  ```
+
+- **`LN07` · `check l10n --literals`** · beta — EN and RU must carry the same set
+  of inline monospace spans (`` `...` ``): identifiers, SQL keywords, parameter and
+  function names, verbatim error strings. `foo()` and `foo` count as one; a
+  `++...++` wrapper is unwrapped; pure-punctuation spans and `NULL`/`true`/`false`
+  are ignored. Reports `CHANGED` (a near-identical pair — likely a typo), then
+  EN-only, then RU-only. Presence is compared, not count. Beta: RU prose that
+  back-ticks a term EN left bare shows up here and usually isn't a bug — treat the
+  output as a review list. `--verbose` lists every hit as a clickable `path:line`.
+  ```bash
+  ./docs_tool.py check l10n --literals
+  ./docs_tool.py check l10n --literals --page resource_groups.adoc
+  ./docs_tool.py check l10n --literals --verbose
   ```
 
 ### `links` — external URL health

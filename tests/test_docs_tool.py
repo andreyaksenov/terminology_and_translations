@@ -1769,6 +1769,114 @@ class PagesStructureParityTests(FixtureTestCase):
         self.assertIn("DIFF", output)
 
 
+class PagesLinkParityTests(FixtureTestCase):
+    def test_matching_links_pass(self):
+        self.write("en/modules/ROOT/pages/page.adoc",
+                   "See xref:udf.adoc[functions] and https://example.com/x[docs].\n")
+        self.write("ru/modules/ROOT/pages/page.adoc",
+                   "См. xref:udf.adoc[функции] и https://example.com/x[документацию].\n")
+        ok, out = self.run_check(dt.check_pages_link_parity)
+        self.assertTrue(ok, out)
+
+    def test_dropped_xref_is_flagged(self):
+        self.write("en/modules/ROOT/pages/page.adoc",
+                   "See xref:udf.adoc[functions] and xref:vacuum.adoc[VACUUM].\n")
+        self.write("ru/modules/ROOT/pages/page.adoc",
+                   "См. xref:udf.adoc[функции].\n")
+        ok, out = self.run_check(dt.check_pages_link_parity)
+        self.assertFalse(ok)
+        self.assertIn("xref:vacuum.adoc", out)
+
+    def test_translated_xref_fragment_is_not_a_finding(self):
+        """Antora derives a section anchor from the (translated) heading,
+        so an xref #fragment legitimately differs EN vs RU."""
+        self.write("en/modules/ROOT/pages/page.adoc",
+                   "See xref:install.adoc#check-installation[the check].\n")
+        self.write("ru/modules/ROOT/pages/page.adoc",
+                   "См. xref:install.adoc#проверка-установки[проверку].\n")
+        ok, out = self.run_check(dt.check_pages_link_parity)
+        self.assertTrue(ok, out)
+
+    def test_wikipedia_language_swap_is_not_a_finding(self):
+        self.write("en/modules/ROOT/pages/page.adoc",
+                   "A https://en.wikipedia.org/wiki/Side-channel_attack[side channel].\n")
+        self.write("ru/modules/ROOT/pages/page.adoc",
+                   "https://ru.wikipedia.org/wiki/%D0%90%D1%82%D0%B0%D0%BA%D0%B0[атака].\n")
+        ok, out = self.run_check(dt.check_pages_link_parity)
+        self.assertTrue(ok, out)
+
+    def test_language_path_segment_in_url_is_not_a_finding(self):
+        self.write("en/modules/ROOT/pages/page.adoc",
+                   "https://docs.example.com/en/docs/7/x.html[docs].\n")
+        self.write("ru/modules/ROOT/pages/page.adoc",
+                   "https://docs.example.com/ru/docs/7/x.html[док].\n")
+        ok, out = self.run_check(dt.check_pages_link_parity)
+        self.assertTrue(ok, out)
+
+    def test_localized_image_filename_is_not_a_finding(self):
+        self.write("en/modules/ROOT/pages/page.adoc", "image:clusters/downloads_en.png[]\n")
+        self.write("ru/modules/ROOT/pages/page.adoc", "image:clusters/downloads_ru.png[]\n")
+        ok, out = self.run_check(dt.check_pages_link_parity)
+        self.assertTrue(ok, out)
+
+    def test_link_in_a_code_block_is_ignored(self):
+        self.write("en/modules/ROOT/pages/page.adoc",
+                   "----\nxref:only-in-en.adoc[x]\n----\n")
+        self.write("ru/modules/ROOT/pages/page.adoc", "----\n----\n")
+        ok, out = self.run_check(dt.check_pages_link_parity)
+        self.assertTrue(ok, out)
+
+
+class PagesLiteralParityTests(FixtureTestCase):
+    def test_matching_literals_pass(self):
+        self.write("en/modules/ROOT/pages/page.adoc",
+                   "Run `ANALYZE` on the `orders` table.\n")
+        self.write("ru/modules/ROOT/pages/page.adoc",
+                   "Выполните `ANALYZE` для таблицy `orders`.\n")
+        ok, out = self.run_check(dt.check_pages_literal_parity)
+        self.assertTrue(ok, out)
+
+    def test_dropped_literal_is_flagged(self):
+        self.write("en/modules/ROOT/pages/page.adoc",
+                   "The `get_part_name()` function and the `SELECT` keyword.\n")
+        self.write("ru/modules/ROOT/pages/page.adoc",
+                   "Функция `get_part_name()`.\n")
+        ok, out = self.run_check(dt.check_pages_literal_parity)
+        self.assertFalse(ok)
+        self.assertIn("`SELECT`", out)
+
+    def test_trailing_parens_are_normalized(self):
+        self.write("en/modules/ROOT/pages/page.adoc", "Call `get_part_name()`.\n")
+        self.write("ru/modules/ROOT/pages/page.adoc", "Вызовите `get_part_name`.\n")
+        ok, out = self.run_check(dt.check_pages_literal_parity)
+        self.assertTrue(ok, out)
+
+    def test_near_identical_pair_reported_as_changed(self):
+        self.write("en/modules/ROOT/pages/page.adoc", "The `VACUUM` command.\n")
+        self.write("ru/modules/ROOT/pages/page.adoc", "Команда `VACCUM`.\n")
+        ok, out = self.run_check(dt.check_pages_literal_parity)
+        self.assertFalse(ok)
+        self.assertIn("CHANGED", out)
+
+    def test_ignore_list_literal_is_not_flagged(self):
+        self.write("en/modules/ROOT/pages/page.adoc", "It returns NULL here.\n")
+        self.write("ru/modules/ROOT/pages/page.adoc", "Возвращает `NULL`.\n")
+        ok, out = self.run_check(dt.check_pages_literal_parity)
+        self.assertTrue(ok, out)
+
+    def test_pure_punctuation_span_is_ignored(self):
+        self.write("en/modules/ROOT/pages/page.adoc", "The `<=` operator.\n")
+        self.write("ru/modules/ROOT/pages/page.adoc", "Оператор.\n")
+        ok, out = self.run_check(dt.check_pages_literal_parity)
+        self.assertTrue(ok, out)
+
+    def test_repeated_literal_with_different_count_is_not_flagged(self):
+        self.write("en/modules/ROOT/pages/page.adoc", "`foo` then it runs.\n")
+        self.write("ru/modules/ROOT/pages/page.adoc", "`foo`, затем `foo` запускается.\n")
+        ok, out = self.run_check(dt.check_pages_literal_parity)
+        self.assertTrue(ok, out)
+
+
 class SyncMergeTests(unittest.TestCase):
     """Unit tests for sync_merge -- the pure structural-alignment function
     behind --sync, no filesystem/git involved."""

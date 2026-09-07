@@ -2477,6 +2477,303 @@ def check_pages_structure_parity(verbose=False) -> bool:
 
 
 # --------------------------------------------------------------------------
+# PAGES: link parity / literal parity (EN vs RU)
+#
+# Both walk the same en/ru page pairs as structure-parity and compare a
+# bag of *language-invariant* tokens -- things a translator has to carry
+# across unchanged. A divergence means a cross-reference, an external
+# link, or a code identifier was dropped, added, retargeted, or (for a
+# literal) accidentally translated.
+# --------------------------------------------------------------------------
+
+
+def _en_ru_page_pairs():
+    """Yield (en_file, ru_file) for every pages/ + partials/ .adoc under
+    every module that passes the --page filter and exists on the EN side
+    (ru_file may not exist yet -- the caller reports MISSING), then
+    (None, ru_file) for every RU file with no EN counterpart. The shared
+    walk behind the per-file EN/RU comparison checks."""
+    for _, en_root, ru_root in module_roots():
+        for subdir in ("pages", "partials"):
+            for en_file in _iter_files(en_root / subdir, ".adoc"):
+                if _page_allowed(en_file):
+                    yield en_file, ru_root / en_file.relative_to(en_root)
+            for ru_file in _iter_files(ru_root / subdir, ".adoc"):
+                if _page_allowed(ru_file) and not (
+                        en_root / ru_file.relative_to(ru_root)).is_file():
+                    yield None, ru_file
+
+
+def _emit_parity_rows(rows, verbose):
+    """Print the per-file token rows, truncated to a preview unless
+    --verbose (same cutoff as the structure-parity skeleton diff)."""
+    if verbose or len(rows) <= _SKELETON_DIFF_PREVIEW:
+        print("\n".join(rows))
+    else:
+        print("\n".join(rows[:_SKELETON_DIFF_PREVIEW]))
+        print(f"         ... {len(rows) - _SKELETON_DIFF_PREVIEW} more; "
+              f"rerun with --verbose for the full list")
+
+
+# xref: / inline image: targets. The bracket that ends the target ("[")
+# is required so a bare "xref:" in prose about the macro itself isn't
+# picked up.
+_XREF_TARGET_RE = re.compile(r'\bxref:([^\[\]\s]+)\[')
+_INLINE_IMAGE_TARGET_RE = re.compile(r'\bimage:{1,2}([^\[\]\s]+)\[')
+# A leading /en/ or /ru/ path segment, and an _en / -ru language tag just
+# before a file extension -- both legitimately differ EN vs RU (a docs
+# site serving a translated copy under a language path; a screenshot with
+# a localised UI, downloads_en.png / downloads_ru.png).
+_URL_LANG_PATH_RE = re.compile(r'^/(?:en|ru)(?=/|$)')
+_ASSET_LANG_TAG_RE = re.compile(r'[_-](?:en|ru)(\.[A-Za-z0-9]+)$')
+
+
+def _normalize_parity_url(url):
+    """Lower-case scheme+host, drop a trailing slash, and fold the shapes
+    that legitimately differ EN vs RU: an `en.`/`ru.` host prefix, a
+    leading `/en/` or `/ru/` path segment, and any Wikipedia link (its
+    article title is translated too) -- all deliberate localisation, not a
+    divergence."""
+    m = re.match(r'^(https?://)([^/]+)(/[^?#]*)?(.*)$', url, re.I)
+    if not m:
+        return url
+    host = m.group(2).lower()
+    if host.endswith("wikipedia.org"):
+        return "https://wikipedia.org/<article>"
+    host = re.sub(r'^(?:en|ru)\.', '', host)
+    path = _URL_LANG_PATH_RE.sub("", (m.group(3) or "").rstrip("/"))
+    return f"https://{host}{path}{m.group(4)}"
+
+
+def _link_parity_tokens(path: Path):
+    """{token: [line numbers]} for every language-invariant link on a
+    comment/code-filtered line: xref target files (the `#fragment` is
+    dropped -- Antora derives a section anchor from the heading text,
+    which is translated), inline image targets, and external URLs. Image
+    and URL targets are normalised for the `/en/`|`/ru/` and `_en`|`_ru`
+    localisation patterns."""
+    lines = _read_lines(path)
+    if lines is None:
+        return {}
+    excluded = _excluded_ref_lines(path)
+    hits = {}
+    for lineno, line in enumerate(lines, 1):
+        if lineno in excluded:
+            continue
+        toks = [f"xref:{t.split('#', 1)[0]}" for t in _XREF_TARGET_RE.findall(line)]
+        toks += [f"image:{_ASSET_LANG_TAG_RE.sub(r'_XX\1', t)}"
+                 for t in _INLINE_IMAGE_TARGET_RE.findall(line)]
+        toks += [f"url:{_normalize_parity_url(u)}"
+                 for u in _extract_urls_from_line(line)]
+        for t in toks:
+            hits.setdefault(t, []).append(lineno)
+    return hits
+
+
+def _parity_ref_lines(en_file, en_lines, ru_file, ru_lines):
+    """Indented `path:line` refs for one differing token -- every physical
+    line it sits on, EN then RU. One clickable reference per line so a
+    --verbose finding opens straight from an IDE / editor terminal."""
+    return ([f"        {en_file}:{n}" for n in en_lines]
+            + [f"        {ru_file}:{n}" for n in ru_lines])
+
+
+def check_pages_link_parity(verbose=False) -> bool:
+    """EN and RU pages must reference the same things.
+
+    Compares, per EN/RU page pair, the multiset of language-invariant link
+    targets -- xref target *files*, inline `image:` targets, and external
+    URLs. Link *text* is translated and ignored; only the destination is
+    compared. A mismatch means a cross-reference or link was dropped,
+    added, or retargeted in translation -- e.g. RU prose that silently
+    loses an xref the EN reader gets. Honours --page; --verbose lists
+    every hit as a clickable `path:line`.
+
+    Folded, not reported (deliberate localisation): a `#fragment` on an
+    xref (Antora derives it from the translated heading), a `/en/`|`/ru/`
+    URL path segment or `en.`/`ru.` host, a Wikipedia article, and an
+    `_en`|`_ru` tag on an image filename.
+
+    Beta: a repo that deliberately links the EN docs site from RU pages
+    (or vice versa), or writes an xref sometimes module-qualified and
+    sometimes not, shows up here -- treat the output as a review list.
+    Not compared: targets inside ---- / .... blocks or // comments."""
+    ok = True
+    mismatch_count = 0
+    for en_file, ru_file in _en_ru_page_pairs():
+        if en_file is None:
+            print(f"MISSING  {ru_file}  (no en counterpart)")
+            ok = False
+            mismatch_count += 1
+            continue
+        if not ru_file.is_file():
+            print(f"MISSING  {en_file}  (no ru counterpart)")
+            ok = False
+            mismatch_count += 1
+            continue
+        en_hits, ru_hits = _link_parity_tokens(en_file), _link_parity_tokens(ru_file)
+        en_c = Counter({k: len(v) for k, v in en_hits.items()})
+        ru_c = Counter({k: len(v) for k, v in ru_hits.items()})
+        if en_c == ru_c:
+            continue
+        print(f"DIFF     {en_file}")
+        print(f"         {ru_file}")
+        rows = []
+        for t in sorted(set(en_c) | set(ru_c)):
+            if en_c[t] == ru_c[t]:
+                continue
+            rows.append(f"    EN {en_c[t]} / RU {ru_c[t]}   {t}")
+            if verbose:
+                rows += _parity_ref_lines(en_file, en_hits.get(t, []),
+                                          ru_file, ru_hits.get(t, []))
+        _emit_parity_rows(rows, verbose)
+        print()
+        ok = False
+        mismatch_count += 1
+
+    if ok:
+        print("OK: en/ru reference the same xrefs, images and URLs.")
+    else:
+        print(f"\nTotal: {mismatch_count} file(s) with link mismatches.")
+    return ok
+
+
+# Inline monospace: the ``double`` form first so a `single` span inside it
+# isn't split out on its own.
+_MONO_SPAN_RE = re.compile(r'``(.+?)``|`([^`]+)`')
+# A balanced +...+ / ++...++ passthrough wrapper (`++<=++` -> <=). Anchored
+# and count-matched so a trailing operator like `C++` is left intact.
+_PASSTHROUGH_WRAP_RE = re.compile(r'^(\+{1,3})(.+?)\1$')
+
+# Literals routinely back-ticked in one language and left bare in the
+# other: true divergence in spirit, but almost never a translation bug and
+# not worth a reviewer's time. Dropped before comparing. Extend per repo.
+_LITERAL_PARITY_IGNORE = frozenset({"NULL", "true", "false"})
+
+
+def _normalize_literal(tok):
+    """Fold the incidental differences: surrounding whitespace, a `+...+`
+    passthrough wrapper, and a trailing `()` on a function name (so
+    `get_part_name()` and `get_part_name` are one token)."""
+    tok = tok.strip()
+    m = _PASSTHROUGH_WRAP_RE.match(tok)
+    if m:
+        tok = m.group(2).strip()
+    if tok.endswith("()"):
+        tok = tok[:-2]
+    return tok
+
+
+def _literal_parity_tokens(path: Path):
+    """{literal: [line numbers]} for every inline monospace span on a
+    comment/code-filtered line, after _normalize_literal. Dropped: empty
+    tokens, spans with no alphanumeric character (`|`, `<=`, punctuation
+    table artifacts), very long spans (a whole translated sentence in
+    backticks), and _LITERAL_PARITY_IGNORE entries."""
+    lines = _read_lines(path)
+    if lines is None:
+        return {}
+    excluded = _excluded_ref_lines(path)
+    hits = {}
+    for lineno, line in enumerate(lines, 1):
+        if lineno in excluded:
+            continue
+        for m in _MONO_SPAN_RE.finditer(line):
+            tok = _normalize_literal(m.group(1) or m.group(2))
+            if (not tok or len(tok) > 80 or tok in _LITERAL_PARITY_IGNORE
+                    or not any(c.isalnum() for c in tok)):
+                continue
+            hits.setdefault(tok, []).append(lineno)
+    return hits
+
+
+def _pair_changed_literals(en_only, ru_only):
+    """Match near-identical EN-only / RU-only literals -- a typo, a case
+    slip, a renumbered identifier -- so they print as one CHANGED line
+    instead of a scattered pair. Greedy, best-ratio-first; mutates the two
+    lists to remove what it paired and returns the (en, ru) pairs."""
+    pairs = []
+    for a in list(en_only):
+        best, best_r = None, 0.80
+        for b in ru_only:
+            r = difflib.SequenceMatcher(None, a, b).ratio()
+            if r > best_r:
+                best, best_r = b, r
+        if best is not None:
+            pairs.append((a, best))
+            en_only.remove(a)
+            ru_only.remove(best)
+    return pairs
+
+
+def check_pages_literal_parity(verbose=False) -> bool:
+    """EN and RU pages must contain the same back-ticked literals.
+
+    Compares, per EN/RU page pair, the *set* of inline monospace spans
+    (`` `...` ``) -- identifiers, SQL keywords, parameter and function
+    names, verbatim error strings: text a translator has to carry across
+    unchanged. `foo()` and `foo` count as one token, a `++...++`
+    passthrough wrapper is unwrapped, and pure-punctuation spans plus
+    _LITERAL_PARITY_IGNORE entries are dropped.
+
+    Reported per file: CHANGED (a near-identical pair -- a likely
+    typo/case slip), then EN-only, then RU-only literals. Presence is
+    what's compared: a literal legitimately repeated a different number of
+    times on each side is normal and not a finding. --verbose lists every
+    hit as a clickable `path:line`.
+
+    Beta: RU technical prose that back-ticks a term EN left bare (or the
+    reverse) surfaces here and usually isn't a translation bug -- treat
+    the output as a review list. Not compared: spans inside ---- / ....
+    blocks or // comments."""
+    ok = True
+    mismatch_count = 0
+    for en_file, ru_file in _en_ru_page_pairs():
+        if en_file is None:
+            print(f"MISSING  {ru_file}  (no en counterpart)")
+            ok = False
+            mismatch_count += 1
+            continue
+        if not ru_file.is_file():
+            print(f"MISSING  {en_file}  (no ru counterpart)")
+            ok = False
+            mismatch_count += 1
+            continue
+        en_hits = _literal_parity_tokens(en_file)
+        ru_hits = _literal_parity_tokens(ru_file)
+        en_only = sorted(set(en_hits) - set(ru_hits))
+        ru_only = sorted(set(ru_hits) - set(en_hits))
+        if not en_only and not ru_only:
+            continue
+        changed = _pair_changed_literals(en_only, ru_only)
+        print(f"DIFF     {en_file}")
+        print(f"         {ru_file}")
+        rows = []
+        for a, b in changed:
+            rows.append(f"    CHANGED   `{a}`  ->  `{b}`")
+            if verbose:
+                rows += _parity_ref_lines(en_file, en_hits[a], ru_file, ru_hits[b])
+        for a in en_only:
+            rows.append(f"    EN only   `{a}`")
+            if verbose:
+                rows += _parity_ref_lines(en_file, en_hits[a], ru_file, [])
+        for b in ru_only:
+            rows.append(f"    RU only   `{b}`")
+            if verbose:
+                rows += _parity_ref_lines(en_file, [], ru_file, ru_hits[b])
+        _emit_parity_rows(rows, verbose)
+        print()
+        ok = False
+        mismatch_count += 1
+
+    if ok:
+        print("OK: en/ru pages carry the same back-ticked literals.")
+    else:
+        print(f"\nTotal: {mismatch_count} file(s) with literal mismatches.")
+    return ok
+
+
+# --------------------------------------------------------------------------
 # PAGES: untranslated-line heuristic
 # --------------------------------------------------------------------------
 
@@ -4193,6 +4490,8 @@ CHECKS = {
     "pages-broken-refs": check_pages_broken_refs,
     "pages-file-path-italics": check_pages_file_path_italics,
     "pages-line-parity": check_pages_line_parity,
+    "pages-link-parity": check_pages_link_parity,
+    "pages-literal-parity": check_pages_literal_parity,
     "pages-no-cyrillic": check_pages_no_cyrillic,
     "pages-no-invisible-chars": check_pages_no_invisible_chars,
     "pages-no-unicode-dashes": check_pages_no_unicode_dashes,
@@ -4215,6 +4514,8 @@ CHECKS = {
 # README can warn people to treat their output as a review list, not a gate.
 BETA_CHECKS = {
     "pages-file-path-italics",
+    "pages-link-parity",
+    "pages-literal-parity",
     "pages-ru-latin-homoglyphs",
     "pages-structure-parity",
     "pages-table-cell-periods",
@@ -4286,6 +4587,8 @@ FAMILIES = {
     "l10n": {                         # L5 -- "RU mirrors EN"
         "lines":        {"pages": "pages-line-parity"},
         "structure":    {"pages": "pages-structure-parity"},
+        "links":        {"pages": "pages-link-parity"},
+        "literals":     {"pages": "pages-literal-parity"},
         "untranslated": {"pages": "pages-translation"},
         "examples":     {"examples": "examples-parity"},
         "nav":          {"nav": "nav-structure-parity"},
@@ -4345,6 +4648,8 @@ RULE_IDS = {
     "pages-translation":          "LN03",
     "examples-parity":            "LN04",
     "nav-structure-parity":       "LN05",
+    "pages-link-parity":          "LN06",
+    "pages-literal-parity":       "LN07",
     "links-external":             "LK01",
 }
 _ID_TO_KEY = {v: k for k, v in RULE_IDS.items()}
@@ -4371,6 +4676,8 @@ SUMMARIES = {
     "pages-terminology":           "EN glossary term translated to a non-house-style RU word",
     "pages-line-parity":           "EN file and its RU counterpart have the same line count",
     "pages-structure-parity":      "EN and RU structural skeletons must match",
+    "pages-link-parity":           "EN and RU must reference the same xref / image / URL targets",
+    "pages-literal-parity":        "EN and RU must carry the same back-ticked literals",
     "pages-translation":           "RU line still identical to EN, or carrying English stopwords",
     "examples-parity":             "EN and RU examples/ must match (byte / comment-stripped)",
     "nav-structure-parity":        "EN and RU nav.adoc structure must match",
@@ -4416,6 +4723,8 @@ RULE_FLAGS = {
     "pages-terminology":           "off-glossary RU translation",
     "pages-line-parity":           "EN/RU line counts differ",
     "pages-structure-parity":      "EN/RU skeletons differ",
+    "pages-link-parity":           "EN/RU link targets differ",
+    "pages-literal-parity":        "EN/RU back-ticked literals differ",
     "pages-translation":           "RU line still English",
     "examples-parity":             "EN/RU examples differ",
     "nav-structure-parity":        "EN/RU nav differs",
@@ -4454,6 +4763,7 @@ _RULES_WITH_VERBOSE = {
     "pages-no-invisible-chars", "pages-ru-latin-homoglyphs", "pages-structure-parity",
     "pages-translation", "examples-parity", "nav-structure-parity",
     "pages-file-path-italics", "pages-terminology", "links-external",
+    "pages-link-parity", "pages-literal-parity",
 }
 _RULES_WITH_EXTERNAL_ROOT = {
     "pages-unbalanced-delimiters", "pages-broken-refs", "partials-orphaned",
@@ -5286,9 +5596,9 @@ def build_parser():
                              "a truncated preview) and per-hit detail on the heuristic checks.")
     page_action = parser.add_argument("--page", action="append", metavar="NAME",
                         help="Limit the per-file en/ru checks (translation, line-parity, "
-                             "structure-parity, no-cyrillic, no-unicode-dashes, no-yo, "
-                             "no-invisible-chars, ru-latin-homoglyphs, table-cell-periods, "
-                             "file-path-italics, terminology) to page(s)/partial(s) whose filename "
+                             "structure-parity, link-parity, literal-parity, no-cyrillic, "
+                             "no-unicode-dashes, no-yo, no-invisible-chars, ru-latin-homoglyphs, "
+                             "table-cell-periods, file-path-italics, terminology) to page(s)/partial(s) whose filename "
                              "matches NAME, e.g. --page resource_groups.adoc -- NAME must end with .adoc "
                              "(AsciiDoc/Antora has no separate topic-id, the filename is the identifier). "
                              "A same-named file in two different directories can be disambiguated by "
