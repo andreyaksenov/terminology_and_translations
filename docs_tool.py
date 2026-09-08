@@ -2504,15 +2504,21 @@ def _en_ru_page_pairs():
                     yield None, ru_file
 
 
-def _emit_parity_rows(rows, verbose):
-    """Print the per-file token rows, truncated to a preview unless
-    --verbose (same cutoff as the structure-parity skeleton diff)."""
-    if verbose or len(rows) <= _SKELETON_DIFF_PREVIEW:
+# Per-file cap on parity findings. A pair that diverges past this isn't a
+# line-by-line fix job -- it needs a proper re-translation -- so the tail
+# is summarised rather than dumped. Scope to one file with --page to see
+# all of it.
+_PARITY_ROW_CAP = 40
+
+
+def _emit_parity_rows(rows):
+    """Print one file's parity rows, capping a very long tail."""
+    if len(rows) <= _PARITY_ROW_CAP:
         print("\n".join(rows))
     else:
-        print("\n".join(rows[:_SKELETON_DIFF_PREVIEW]))
-        print(f"         ... {len(rows) - _SKELETON_DIFF_PREVIEW} more; "
-              f"rerun with --verbose for the full list")
+        print("\n".join(rows[:_PARITY_ROW_CAP]))
+        print(f"         ... and more; this pair needs a full re-check "
+              f"(scope to it with --page to see everything)")
 
 
 # xref: / inline image: targets. The bracket that ends the target ("[")
@@ -2570,19 +2576,15 @@ def _link_parity_tokens(path: Path):
     return hits
 
 
-def _parity_refs(en_file, en_lines, ru_file, ru_lines, verbose):
+def _parity_refs(en_file, en_lines, ru_file, ru_lines):
     """Clickable `path:line` references for one differing token, so a
     finding opens straight from an IDE / editor terminal. Returns
-    (row_suffix, extra_lines):
-
-    * always a compact suffix -- the first hit on each side -- appended
-      to the token's own row;
-    * under --verbose, one indented sub-line per further occurrence."""
+    (row_suffix, extra_lines): the first hit on each side goes on the
+    token's own row, any further occurrences get an indented sub-line
+    each."""
     sides = [(en_file, sorted(set(en_lines))), (ru_file, sorted(set(ru_lines)))]
     suffix = "   " + "  ".join(f"{f}:{ns[0]}" for f, ns in sides if ns)
-    extra = []
-    if verbose:
-        extra = [f"        {f}:{n}" for f, ns in sides for n in ns[1:]]
+    extra = [f"        {f}:{n}" for f, ns in sides for n in ns[1:]]
     return (suffix if suffix.strip() else ""), extra
 
 
@@ -2595,8 +2597,8 @@ def check_pages_link_parity(verbose=False) -> bool:
     compared. A mismatch means a cross-reference or link was dropped,
     added, or retargeted in translation -- e.g. RU prose that silently
     loses an xref the EN reader gets. Honours --page. Every finding
-    carries a clickable `path:line` (the first hit on each side);
-    --verbose adds a sub-line for each further occurrence.
+    carries a clickable `path:line` -- the first hit on each side on the
+    row, any further occurrences one indented sub-line each.
 
     Folded, not reported (deliberate localisation): a `#fragment` on an
     xref (Antora derives it from the translated heading), a `/en/`|`/ru/`
@@ -2632,10 +2634,10 @@ def check_pages_link_parity(verbose=False) -> bool:
             if en_c[t] == ru_c[t]:
                 continue
             suffix, extra = _parity_refs(en_file, en_hits.get(t, []),
-                                         ru_file, ru_hits.get(t, []), verbose)
+                                         ru_file, ru_hits.get(t, []))
             rows.append(f"    EN {en_c[t]} / RU {ru_c[t]}   {t}{suffix}")
             rows += extra
-        _emit_parity_rows(rows, verbose)
+        _emit_parity_rows(rows)
         print()
         ok = False
         mismatch_count += 1
@@ -2729,8 +2731,8 @@ def check_pages_literal_parity(verbose=False) -> bool:
     typo/case slip), then EN-only, then RU-only literals. Presence is
     what's compared: a literal legitimately repeated a different number of
     times on each side is normal and not a finding. Every finding carries
-    a clickable `path:line` (the first hit on each side); --verbose adds a
-    sub-line for each further occurrence.
+    a clickable `path:line` -- the first hit on each side on the row, any
+    further occurrences one indented sub-line each.
 
     Beta: RU technical prose that back-ticks a term EN left bare (or the
     reverse) surfaces here and usually isn't a translation bug -- treat
@@ -2760,18 +2762,18 @@ def check_pages_literal_parity(verbose=False) -> bool:
         print(f"         {ru_file}")
         rows = []
         for a, b in changed:
-            suffix, extra = _parity_refs(en_file, en_hits[a], ru_file, ru_hits[b], verbose)
+            suffix, extra = _parity_refs(en_file, en_hits[a], ru_file, ru_hits[b])
             rows.append(f"    CHANGED   `{a}`  ->  `{b}`{suffix}")
             rows += extra
         for a in en_only:
-            suffix, extra = _parity_refs(en_file, en_hits[a], ru_file, [], verbose)
+            suffix, extra = _parity_refs(en_file, en_hits[a], ru_file, [])
             rows.append(f"    EN only   `{a}`{suffix}")
             rows += extra
         for b in ru_only:
-            suffix, extra = _parity_refs(en_file, [], ru_file, ru_hits[b], verbose)
+            suffix, extra = _parity_refs(en_file, [], ru_file, ru_hits[b])
             rows.append(f"    RU only   `{b}`{suffix}")
             rows += extra
-        _emit_parity_rows(rows, verbose)
+        _emit_parity_rows(rows)
         print()
         ok = False
         mismatch_count += 1
@@ -4773,7 +4775,6 @@ _RULES_WITH_VERBOSE = {
     "pages-no-invisible-chars", "pages-ru-latin-homoglyphs", "pages-structure-parity",
     "pages-translation", "examples-parity", "nav-structure-parity",
     "pages-file-path-italics", "pages-terminology", "links-external",
-    "pages-link-parity", "pages-literal-parity",
 }
 _RULES_WITH_EXTERNAL_ROOT = {
     "pages-unbalanced-delimiters", "pages-broken-refs", "partials-orphaned",

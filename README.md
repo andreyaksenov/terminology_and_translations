@@ -321,11 +321,12 @@ Needs a glossary: `--glossary PATH` (pipe-delimited `en|ru|ru_pattern|note`), or
   translated heading), a `/en/`|`/ru/` URL path segment or `en.`/`ru.` host, a
   Wikipedia article, an `_en`|`_ru` image-filename tag. Beta: a repo that
   deliberately links its EN docs site from RU pages, or writes an xref sometimes
-  module-qualified and sometimes not, shows up here. Every finding carries a clickable `path:line`; `--verbose` adds one per extra occurrence.
+  module-qualified and sometimes not, shows up here. Every finding carries a
+  clickable `path:line` (first hit on each side on the row, further occurrences
+  one sub-line each) — no `--verbose` needed.
   ```bash
   ./docs_tool.py check l10n --links
   ./docs_tool.py check l10n --links --page resource_groups.adoc
-  ./docs_tool.py check l10n --links --verbose
   ```
 
 - **`LN07` · `check l10n --literals`** · beta — EN and RU must carry the same set
@@ -335,11 +336,12 @@ Needs a glossary: `--glossary PATH` (pipe-delimited `en|ru|ru_pattern|note`), or
   are ignored. Reports `CHANGED` (a near-identical pair — likely a typo), then
   EN-only, then RU-only. Presence is compared, not count. Beta: RU prose that
   back-ticks a term EN left bare shows up here and usually isn't a bug — treat the
-  output as a review list. Every finding carries a clickable `path:line`; `--verbose` adds one per extra occurrence.
+  output as a review list. Every finding carries a clickable `path:line` (first hit
+  on each side on the row, further occurrences one sub-line each) — no `--verbose`
+  needed.
   ```bash
   ./docs_tool.py check l10n --literals
   ./docs_tool.py check l10n --literals --page resource_groups.adoc
-  ./docs_tool.py check l10n --literals --verbose
   ```
 
 ### `links` — external URL health
