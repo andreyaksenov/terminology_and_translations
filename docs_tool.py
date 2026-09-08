@@ -3373,6 +3373,7 @@ def check_pages_file_path_italics() -> bool:
 # --------------------------------------------------------------------------
 
 _ADMONITION_LABEL_RE = re.compile(r'^(?:NOTE|TIP|WARNING|IMPORTANT|CAUTION):\s')
+_ADMONITION_BLOCK_RE = re.compile(r'^\[(?:NOTE|TIP|WARNING|IMPORTANT|CAUTION)\]\s*$')
 _A_CELL_START_RE = re.compile(r'^(\.\d+\+)?a\|')
 # Broader than the shared _SKIP_TABLE_CELL_RE: also recognizes cell-format/
 # alignment prefixes (^, <, >, ~, rowspan/colspan like "2.3+", combined
@@ -3413,6 +3414,14 @@ def _is_period_violation(content: str) -> bool:
             and not _ends_with_known_abbreviation(content))
 
 
+def _looks_sentence_terminated(content: str) -> bool:
+    """True if `content` ends the way a finished sentence does. Used the
+    other way round from the main rule: the prose *before* a trailing
+    NOTE in a cell is mid-cell text, so it *should* end this way."""
+    c = content.rstrip()
+    return c.endswith('...') or c.endswith(('.', '!', '?', ':', '…'))
+
+
 def check_pages_table_cell_periods() -> bool:
     """New check (not a port of an existing shell script): house style says
     the last sentence in a table cell should not end with a period.
@@ -3426,6 +3435,13 @@ def check_pages_table_cell_periods() -> bool:
     - a single space-free abbreviation like `Мин.`/`Макс.` (see
       _is_abbreviation_like).
 
+    The admonition exception cuts the other way for the prose *before* a
+    trailing admonition: that paragraph is no longer the visual end of the
+    cell, so it *should* end like a finished sentence -- a cell whose last
+    text before a closing NOTE has no `.`/`!`/`?`/`:` is flagged as
+    `NO PERIOD`. (A one/two-word cell label ahead of the NOTE isn't prose,
+    so it's left alone.)
+
     Deliberately heuristic: cells are tracked by lookahead, but a blank line
     is *never* by itself a cell boundary -- both `a|` cells (rebalance_status.
     adoc) and even plain `|` cells (fs-commands/setfacl.adoc) can hold several
@@ -3436,7 +3452,8 @@ def check_pages_table_cell_periods() -> bool:
     only a bare `|` cell (not `a|`/`m|`/etc., which always occupy the rest
     of their line) is split this way."""
     ok = True
-    total_hits = 0
+    total_period = 0
+    total_no_period = 0
     for _, en_root, ru_root in module_roots():
         for root in (en_root, ru_root):
             for f in list(_iter_files(root / "pages", ".adoc")) + list(_iter_files(root / "partials", ".adoc")):
@@ -3449,21 +3466,36 @@ def check_pages_table_cell_periods() -> bool:
                 in_table = False
                 in_admonition_block = False
                 cell_exempt = False
+                # prose before the first admonition of the current cell, and
+                # whether any real prose has appeared after it (in which case
+                # the admonition wasn't the cell's tail after all).
+                last_prose = None
+                pre_admonition_prose = None
+                prose_after_admonition = False
                 n = len(lines)
+
+                def flush_pre_admonition():
+                    if pre_admonition_prose and not prose_after_admonition:
+                        lineno, text = pre_admonition_prose
+                        if len(text.split()) >= 3 and not _looks_sentence_terminated(text):
+                            hits.append((lineno, text, "no-period"))
+
                 for i, line in enumerate(lines):
                     stripped = line.strip()
                     if stripped == "|===":
+                        flush_pre_admonition()
                         in_table = not in_table
-                        in_admonition_block = False
-                        cell_exempt = False
+                        in_admonition_block = cell_exempt = prose_after_admonition = False
+                        last_prose = pre_admonition_prose = None
                         continue
                     if not in_table:
                         continue
 
                     is_cell_start = _TABLE_CELL_START_RE.match(line) is not None
                     if is_cell_start:
-                        in_admonition_block = False
-                        cell_exempt = False
+                        flush_pre_admonition()
+                        in_admonition_block = cell_exempt = prose_after_admonition = False
+                        last_prose = pre_admonition_prose = None
 
                     if stripped == "" or stripped.startswith("//"):
                         continue
@@ -3476,8 +3508,26 @@ def check_pages_table_cell_periods() -> bool:
                     if in_admonition_block:
                         continue
 
-                    if _ADMONITION_LABEL_RE.match(stripped) or _STRUCT_LIST_MARKER_RE.match(stripped):
+                    is_admonition = bool(_ADMONITION_LABEL_RE.match(stripped)
+                                         or _ADMONITION_BLOCK_RE.match(stripped))
+                    if is_admonition or _STRUCT_LIST_MARKER_RE.match(stripped):
                         cell_exempt = True
+                    if is_admonition and pre_admonition_prose is None:
+                        pre_admonition_prose = last_prose
+
+                    # Track the last plain-prose line of the cell (for the
+                    # missing-period-before-a-trailing-NOTE check).
+                    prose = stripped
+                    if is_cell_start:
+                        prose = line[_TABLE_CELL_START_RE.match(line).end():].strip()
+                    is_structural = (is_admonition
+                                     or _STRUCT_BLOCKTITLE_RE.match(stripped)
+                                     or _STRUCT_LIST_MARKER_RE.match(stripped))
+                    if prose and not is_structural:
+                        if pre_admonition_prose is not None:
+                            prose_after_admonition = True
+                        else:
+                            last_prose = (i + 1, prose)
 
                     j = i + 1
                     while j < n and (lines[j].strip() == "" or lines[j].strip().startswith("//")):
@@ -3495,7 +3545,7 @@ def check_pages_table_cell_periods() -> bool:
                         for seg in segments[:-1]:
                             content = seg.strip()
                             if _is_period_violation(content):
-                                hits.append((i + 1, content))
+                                hits.append((i + 1, content, "period"))
                         content = segments[-1].strip()
                     else:
                         content = stripped
@@ -3504,19 +3554,29 @@ def check_pages_table_cell_periods() -> bool:
                             content = line[m.end():].strip()
 
                     if _is_period_violation(content):
-                        hits.append((i + 1, line if not is_cell_start else content))
+                        hits.append((i + 1, content if is_cell_start else line, "period"))
+
+                flush_pre_admonition()
 
                 if hits:
                     ok = False
-                    total_hits += len(hits)
+                    total_period += sum(1 for h in hits if h[2] == "period")
+                    total_no_period += sum(1 for h in hits if h[2] == "no-period")
                     print(f"FILE     {f}")
-                    for lineno, line in hits:
-                        print(f"  {f}:{lineno}: {line.strip() if isinstance(line, str) else line}")
+                    for lineno, text, kind in sorted(hits):
+                        text = text.strip() if isinstance(text, str) else text
+                        prefix = "NO PERIOD before a trailing NOTE -- " if kind == "no-period" else ""
+                        print(f"  {f}:{lineno}: {prefix}{text}")
 
     if ok:
-        print("OK: no table cell ends its last sentence with a period.")
+        print("OK: table cell punctuation is consistent.")
     else:
-        print(f"\nTotal: {total_hits} table cell(s) ending with a period.")
+        parts = []
+        if total_period:
+            parts.append(f"{total_period} ending with a period")
+        if total_no_period:
+            parts.append(f"{total_no_period} missing a period before a trailing NOTE")
+        print(f"\nTotal: {', '.join(parts)}.")
     return ok
 
 
@@ -4680,7 +4740,7 @@ SUMMARIES = {
     "tags-orphaned":               "every tag::/end:: region pulled in by an include tag=",
     "pages-no-yo":                 "no ё/Ё in ru/ files (:page-author: exempt)",
     "pages-file-path-italics":     "file / directory names in prose need _italics_",
-    "pages-table-cell-periods":    "a table cell's last sentence shouldn't end with a period",
+    "pages-table-cell-periods":    "a table cell's last sentence shouldn't end with a period (but the prose before a trailing NOTE should)",
     "pages-terminology":           "EN glossary term translated to a non-house-style RU word",
     "pages-line-parity":           "EN file and its RU counterpart have the same line count",
     "pages-structure-parity":      "EN and RU structural skeletons must match",
@@ -4727,7 +4787,7 @@ RULE_FLAGS = {
     "pages-orphaned":              "defined but never referenced",
     "pages-no-yo":                 "ё in RU files",
     "pages-file-path-italics":     "file path not in italics",
-    "pages-table-cell-periods":    "table cell ending in a period",
+    "pages-table-cell-periods":    "unwanted or missing period",
     "pages-terminology":           "off-glossary RU translation",
     "pages-line-parity":           "EN/RU line counts differ",
     "pages-structure-parity":      "EN/RU skeletons differ",

@@ -1247,6 +1247,60 @@ class PagesTableCellPeriodsTests(FixtureTestCase):
         ok, output = self.run_check(dt.check_pages_table_cell_periods)
         self.assertTrue(ok, output)
 
+    def test_missing_period_before_a_trailing_note_is_flagged(self):
+        self.antora_yml("en", "TEST")
+        self.write(
+            "en/modules/ROOT/pages/table.adoc",
+            "|===\na|The default value is `-1`.\nWhen unset the group uses the "
+            "server parameter instead\n\nNOTE: This behaviour changed in 7.0.\n|===\n",
+        )
+        ok, output = self.run_check(dt.check_pages_table_cell_periods)
+        self.assertFalse(ok)
+        self.assertIn("NO PERIOD before a trailing NOTE", output)
+        self.assertIn("server parameter instead", output)
+
+    def test_missing_period_before_a_trailing_note_block_is_flagged(self):
+        self.antora_yml("en", "TEST")
+        self.write(
+            "en/modules/ROOT/pages/table.adoc",
+            "|===\na|Some full sentence with no closing period\n\n[NOTE]\n====\n"
+            "A block admonition.\n====\n|===\n",
+        )
+        ok, output = self.run_check(dt.check_pages_table_cell_periods)
+        self.assertFalse(ok)
+        self.assertIn("no closing period", output)
+
+    def test_terminated_prose_before_a_note_is_not_flagged(self):
+        self.antora_yml("en", "TEST")
+        self.write(
+            "en/modules/ROOT/pages/table.adoc",
+            "|===\na|This sentence already ends properly.\n\nNOTE: Extra context.\n|===\n",
+        )
+        ok, output = self.run_check(dt.check_pages_table_cell_periods)
+        self.assertTrue(ok, output)
+
+    def test_short_label_before_a_note_is_not_flagged(self):
+        """A one/two-word cell label ahead of the NOTE is not prose."""
+        self.antora_yml("en", "TEST")
+        self.write(
+            "en/modules/ROOT/pages/table.adoc",
+            "|===\na|Memory limit\n\nNOTE: Defaults to unlimited.\n|===\n",
+        )
+        ok, output = self.run_check(dt.check_pages_table_cell_periods)
+        self.assertTrue(ok, output)
+
+    def test_prose_after_the_note_means_the_note_is_not_trailing(self):
+        self.antora_yml("en", "TEST")
+        self.write(
+            "en/modules/ROOT/pages/table.adoc",
+            "|===\na|A sentence with no period here\n\nNOTE: Caveat.\n\n"
+            "A closing sentence with no period either\n|===\n",
+        )
+        ok, output = self.run_check(dt.check_pages_table_cell_periods)
+        # the NOTE isn't the cell's tail, so the pre-NOTE line isn't judged;
+        # the actual last line has no period, which is the normal (good) case
+        self.assertTrue(ok, output)
+
     def test_multi_cell_single_line_is_split(self):
         """A compact header-style row packs several plain "|"-cells on one
         physical line; each must be checked individually, not just the last

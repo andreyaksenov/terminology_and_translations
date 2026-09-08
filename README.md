@@ -129,7 +129,7 @@ rationales — the terminal equivalent of this section. `beta` rules are heurist
 | `RF02`–`RF06` | `check refs --orphaned [--target …]` | defined but never referenced |
 | `ST01` | `check style --no-yo` | `ё` in RU files |
 | `ST02` | `check style --file-path-italics` | file path not in italics |
-| `ST03` | `check style --table-cell-periods` | table cell ending in a period |
+| `ST03` | `check style --table-cell-periods` | table cell: unwanted trailing period, or one missing before a NOTE |
 | `TM01` | `check terms` | off-glossary RU translation |
 | `LN01` | `check l10n --lines` | EN/RU line counts differ |
 | `LN02` | `check l10n --structure` | EN/RU skeletons differ |
@@ -251,6 +251,9 @@ Heuristic family — treat findings as a review list, not a hard gate.
 
 - **`ST03` · `check style --table-cell-periods`** · beta — a table cell's last
   sentence shouldn't end with a period (lists, admonitions, abbreviations exempt).
+  The flip side: when a cell ends with a `NOTE`/`TIP`/… admonition, the prose
+  *before* it is mid-cell text and **should** end with `.`/`!`/`?`/`:` — a cell
+  missing that is reported as `NO PERIOD before a trailing NOTE`.
   ```bash
   ./docs_tool.py check style --table-cell-periods
   ./docs_tool.py check style --table-cell-periods --page resource_groups.adoc
