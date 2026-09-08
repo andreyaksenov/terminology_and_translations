@@ -1259,6 +1259,19 @@ class PagesTableCellPeriodsTests(FixtureTestCase):
         self.assertIn("NO PERIOD before a trailing NOTE", output)
         self.assertIn("server parameter instead", output)
 
+    def test_all_admonition_types_are_covered_and_named(self):
+        self.antora_yml("en", "TEST")
+        for label in ("NOTE", "TIP", "WARNING", "IMPORTANT", "CAUTION"):
+            self.write(
+                f"en/modules/ROOT/pages/t_{label}.adoc",
+                f"|===\na|A full sentence with no closing period here\n\n"
+                f"{label}: Some caveat text.\n|===\n",
+            )
+        ok, output = self.run_check(dt.check_pages_table_cell_periods)
+        self.assertFalse(ok)
+        for label in ("NOTE", "TIP", "WARNING", "IMPORTANT", "CAUTION"):
+            self.assertIn(f"NO PERIOD before a trailing {label}", output)
+
     def test_missing_period_before_a_trailing_note_block_is_flagged(self):
         self.antora_yml("en", "TEST")
         self.write(

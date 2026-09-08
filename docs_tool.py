@@ -3374,6 +3374,7 @@ def check_pages_file_path_italics() -> bool:
 
 _ADMONITION_LABEL_RE = re.compile(r'^(?:NOTE|TIP|WARNING|IMPORTANT|CAUTION):\s')
 _ADMONITION_BLOCK_RE = re.compile(r'^\[(?:NOTE|TIP|WARNING|IMPORTANT|CAUTION)\]\s*$')
+_ADMONITION_NAME_RE = re.compile(r'^\[?(NOTE|TIP|WARNING|IMPORTANT|CAUTION)\b')
 _A_CELL_START_RE = re.compile(r'^(\.\d+\+)?a\|')
 # Broader than the shared _SKIP_TABLE_CELL_RE: also recognizes cell-format/
 # alignment prefixes (^, <, >, ~, rowspan/colspan like "2.3+", combined
@@ -3436,11 +3437,11 @@ def check_pages_table_cell_periods() -> bool:
       _is_abbreviation_like).
 
     The admonition exception cuts the other way for the prose *before* a
-    trailing admonition: that paragraph is no longer the visual end of the
-    cell, so it *should* end like a finished sentence -- a cell whose last
-    text before a closing NOTE has no `.`/`!`/`?`/`:` is flagged as
-    `NO PERIOD`. (A one/two-word cell label ahead of the NOTE isn't prose,
-    so it's left alone.)
+    trailing admonition (any of the five types): that paragraph is no longer
+    the visual end of the cell, so it *should* end like a finished sentence
+    -- a cell whose last text before a closing NOTE/TIP/... has no
+    `.`/`!`/`?`/`:` is flagged as `NO PERIOD`. (A one/two-word cell label
+    ahead of the admonition isn't prose, so it's left alone.)
 
     Deliberately heuristic: cells are tracked by lookahead, but a blank line
     is *never* by itself a cell boundary -- both `a|` cells (rebalance_status.
@@ -3476,9 +3477,9 @@ def check_pages_table_cell_periods() -> bool:
 
                 def flush_pre_admonition():
                     if pre_admonition_prose and not prose_after_admonition:
-                        lineno, text = pre_admonition_prose
+                        lineno, text, label = pre_admonition_prose
                         if len(text.split()) >= 3 and not _looks_sentence_terminated(text):
-                            hits.append((lineno, text, "no-period"))
+                            hits.append((lineno, text, "no-period", label))
 
                 for i, line in enumerate(lines):
                     stripped = line.strip()
@@ -3512,8 +3513,9 @@ def check_pages_table_cell_periods() -> bool:
                                          or _ADMONITION_BLOCK_RE.match(stripped))
                     if is_admonition or _STRUCT_LIST_MARKER_RE.match(stripped):
                         cell_exempt = True
-                    if is_admonition and pre_admonition_prose is None:
-                        pre_admonition_prose = last_prose
+                    if is_admonition and pre_admonition_prose is None and last_prose is not None:
+                        pre_admonition_prose = (*last_prose,
+                                                _ADMONITION_NAME_RE.match(stripped).group(1))
 
                     # Track the last plain-prose line of the cell (for the
                     # missing-period-before-a-trailing-NOTE check).
@@ -3545,7 +3547,7 @@ def check_pages_table_cell_periods() -> bool:
                         for seg in segments[:-1]:
                             content = seg.strip()
                             if _is_period_violation(content):
-                                hits.append((i + 1, content, "period"))
+                                hits.append((i + 1, content, "period", None))
                         content = segments[-1].strip()
                     else:
                         content = stripped
@@ -3554,7 +3556,7 @@ def check_pages_table_cell_periods() -> bool:
                             content = line[m.end():].strip()
 
                     if _is_period_violation(content):
-                        hits.append((i + 1, content if is_cell_start else line, "period"))
+                        hits.append((i + 1, content if is_cell_start else line, "period", None))
 
                 flush_pre_admonition()
 
@@ -3563,9 +3565,9 @@ def check_pages_table_cell_periods() -> bool:
                     total_period += sum(1 for h in hits if h[2] == "period")
                     total_no_period += sum(1 for h in hits if h[2] == "no-period")
                     print(f"FILE     {f}")
-                    for lineno, text, kind in sorted(hits):
+                    for lineno, text, kind, label in sorted(hits, key=lambda h: (h[0], str(h[1]))):
                         text = text.strip() if isinstance(text, str) else text
-                        prefix = "NO PERIOD before a trailing NOTE -- " if kind == "no-period" else ""
+                        prefix = f"NO PERIOD before a trailing {label} -- " if kind == "no-period" else ""
                         print(f"  {f}:{lineno}: {prefix}{text}")
 
     if ok:
@@ -3575,7 +3577,7 @@ def check_pages_table_cell_periods() -> bool:
         if total_period:
             parts.append(f"{total_period} ending with a period")
         if total_no_period:
-            parts.append(f"{total_no_period} missing a period before a trailing NOTE")
+            parts.append(f"{total_no_period} missing a period before a trailing admonition")
         print(f"\nTotal: {', '.join(parts)}.")
     return ok
 

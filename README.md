@@ -251,9 +251,10 @@ Heuristic family — treat findings as a review list, not a hard gate.
 
 - **`ST03` · `check style --table-cell-periods`** · beta — a table cell's last
   sentence shouldn't end with a period (lists, admonitions, abbreviations exempt).
-  The flip side: when a cell ends with a `NOTE`/`TIP`/… admonition, the prose
-  *before* it is mid-cell text and **should** end with `.`/`!`/`?`/`:` — a cell
-  missing that is reported as `NO PERIOD before a trailing NOTE`.
+  The flip side: when a cell ends with any admonition (`NOTE`/`TIP`/`WARNING`/
+  `IMPORTANT`/`CAUTION`, one-liner or `[…]`/`====` block), the prose *before* it
+  is mid-cell text and **should** end with `.`/`!`/`?`/`:` — a cell missing that
+  is reported as `NO PERIOD before a trailing <TYPE>`.
   ```bash
   ./docs_tool.py check style --table-cell-periods
   ./docs_tool.py check style --table-cell-periods --page resource_groups.adoc
