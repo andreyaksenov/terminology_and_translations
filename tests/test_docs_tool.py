@@ -2378,6 +2378,16 @@ class RuleFlagMetadataTests(unittest.TestCase):
         for key, fn in dt.CHECKS.items():
             self.assertNotIn("verbose", inspect.signature(fn).parameters, key)
 
+    def test_flag_family_scope_names_real_flags_and_families(self):
+        """_FLAG_FAMILY_SCOPE drives which flags `check <family> <TAB>`
+        hides -- keep it honest against the parser and FAMILIES."""
+        check_flags = set()
+        for a in dt._build_v2_parser()._subparsers._group_actions[0].choices["check"]._actions:
+            check_flags.update(a.option_strings)
+        for flag, fams in dt._FLAG_FAMILY_SCOPE.items():
+            self.assertIn(flag, check_flags, flag)
+            self.assertLessEqual(fams, set(dt.FAMILIES), flag)
+
 
 class NoDocsTreeTests(unittest.TestCase):
     """A check run from a directory with no en/modules or ru/modules must
@@ -2522,6 +2532,38 @@ class CheckRuleCompletionTests(unittest.TestCase):
         comps = self._complete("docs_tool.py check chars markup ")
         self.assertNotIn("--no-cyrillic", comps)
         self.assertNotIn("--backticks", comps)
+
+    def test_family_hides_other_families_flags(self):
+        comps = self._complete("docs_tool.py check l10n ")
+        for f in ("--show-unverified", "--offline", "--timeout", "--insecure",
+                  "--glossary", "--external-root"):
+            self.assertNotIn(f, comps, f)
+        self.assertIn("--page", comps)       # generic flags stay
+        self.assertIn("--target", comps)
+
+    def test_links_family_keeps_link_flags(self):
+        comps = self._complete("docs_tool.py check links ")
+        self.assertLessEqual({"--offline", "--show-unverified", "--timeout"}, comps)
+        self.assertNotIn("--glossary", comps)
+
+    def test_terms_family_keeps_glossary_refs_keeps_external_root(self):
+        self.assertIn("--glossary", self._complete("docs_tool.py check terms "))
+        self.assertNotIn("--offline", self._complete("docs_tool.py check terms "))
+        self.assertIn("--external-root", self._complete("docs_tool.py check refs "))
+
+    def test_multi_family_keeps_a_flag_either_family_uses(self):
+        comps = self._complete("docs_tool.py check terms l10n ")
+        self.assertIn("--glossary", comps)          # terms uses it
+        self.assertNotIn("--offline", comps)        # neither does
+
+    def test_family_already_on_the_line_is_not_re_offered(self):
+        comps = self._complete("docs_tool.py check l10n ")
+        self.assertNotIn("l10n", comps)
+        self.assertIn("chars", comps)
+
+    def test_flags_unfiltered_before_a_family_is_chosen(self):
+        comps = self._complete("docs_tool.py check ")
+        self.assertLessEqual({"--offline", "--glossary", "--external-root"}, comps)
 
     def test_show_completes_rule_names_and_ids(self):
         comps = self._complete("docs_tool.py show ")

@@ -497,8 +497,10 @@ The module form is used deliberately: `pip install --user` puts the
 completion and no explanation.
 
 Then `./docs_tool.py <TAB>` completes subcommands and families, and completion is
-family-aware: `check l10n <TAB>` offers `--lines`, `--structure`, … and not
-`--no-yo`. `--page` and `sync`'s file argument complete real filenames from the
+family-aware: `check l10n <TAB>` offers `--lines`, `--structure`, … but not
+`--no-yo` (another family's rule), `--glossary` (`terms` only) or the `check links`
+flags — and drops a family already on the line. `show <TAB>` completes rule names
+and IDs; `--page` and `sync`'s file argument complete real filenames from the
 current site.
 </details>
 

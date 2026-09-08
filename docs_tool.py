@@ -5541,12 +5541,15 @@ def _complete_page_or_dir_name(**kwargs):
     return sorted(names | dirs)
 
 
-def _complete_family(prefix="", **kwargs):
+def _complete_family(prefix="", parsed_args=None, **kwargs):
     """argcomplete completer for the 'check' FAMILY positional. Returns an
     ordered {name: description} map so the shell lists the families in
     writing-quality-pyramid order (chars -> links), not sorted, and shows
-    each one's one-liner instead of a shared blob."""
-    return {k: v for k, v in FAMILY_DESC.items() if k.startswith(prefix)}
+    each one's one-liner instead of a shared blob. Families already on the
+    line are dropped."""
+    already = set(getattr(parsed_args, "families", None) or [])
+    return {k: v for k, v in FAMILY_DESC.items()
+            if k.startswith(prefix) and k not in already}
 
 
 def _complete_show_name(prefix="", **kwargs):
@@ -5563,15 +5566,22 @@ def _complete_list_what(prefix="", **kwargs):
 
 if argcomplete:
     class _CheckCompletionFinder(argcomplete.CompletionFinder):
-        """The --<rule> flags are registered with help=SUPPRESS (so `check -h`
-        stays short), which also hides them from completion. Re-offer them
-        here, but only the ones that belong to the single family already on
-        the line -- `check l10n <TAB>` should suggest --lines/--structure/...,
-        not --no-yo."""
+        """Tailor `check <family> <TAB>` to the family already on the line:
+
+        * re-offer that family's --<rule> flags (registered help=SUPPRESS
+          so `check -h` stays short, which also hides them from completion)
+          -- `check l10n <TAB>` suggests --lines/--structure/..., not --no-yo;
+        * drop flags that do nothing for the chosen families -- no
+          --show-unverified / --glossary under `check l10n` (see
+          _FLAG_FAMILY_SCOPE)."""
 
         def collect_completions(self, active_parsers, parsed_args, cword_prefix):
             comps = super().collect_completions(active_parsers, parsed_args, cword_prefix)
             fams = [f for f in (getattr(parsed_args, "families", None) or []) if f in FAMILIES]
+            if fams:
+                chosen = set(fams)
+                comps = [c for c in comps if c not in _FLAG_FAMILY_SCOPE
+                         or (_FLAG_FAMILY_SCOPE[c] & chosen)]
             if len(fams) == 1:
                 for rule, targets in FAMILIES[fams[0]].items():
                     flag = "--" + rule
@@ -5934,6 +5944,19 @@ def _rule_of(key):
             if key in targets.values():
                 return rule
     return key
+
+
+# `check`-surface flags that only do something for certain families -- so
+# `check l10n <TAB>` doesn't offer the `check links` / `check terms` flags.
+# --external-root's families are derived from _RULES_WITH_EXTERNAL_ROOT so
+# the two can't drift; the link flags are whatever _add_link_args registers.
+_LINK_FLAG_NAMES = ("--timeout", "--offline", "--allow-domain", "--link-cache",
+                    "--show-unverified", "--insecure")
+_FLAG_FAMILY_SCOPE = {
+    **{f: {"links"} for f in _LINK_FLAG_NAMES},
+    "--glossary": {"terms"},
+    "--external-root": {_family_of(_rule_of(k)) for k in _RULES_WITH_EXTERNAL_ROOT},
+}
 
 
 def _resolve_check_name(name):
