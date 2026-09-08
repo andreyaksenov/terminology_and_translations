@@ -393,10 +393,10 @@ def _format_size(num_bytes: int) -> str:
 
 
 def _diff_pair_header(en_file, ru_file) -> str:
-    """One-line `DIFF` banner: the pair's shared path (its `en/`|`ru/`
-    prefix dropped), as a grep anchor. Each diff row below carries its own
-    click-to-jump `path:line` on the right side."""
-    return f"DIFF  {str(en_file).split('/', 1)[-1]}"
+    """One-line `DIFF` banner: the pair's shared path (its `en/`|`ru/` top
+    segment dropped), as a grep anchor. Each diff row below carries its
+    own click-to-jump `path:line` for the side it belongs to."""
+    return f"DIFF  {'/'.join(Path(en_file).parts[1:])}"
 
 
 _HUNK_RE = re.compile(r'^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@')
@@ -733,20 +733,19 @@ def _nav_skeleton(path: Path):
 
 
 # Per-file ceiling on printed finding/diff lines. A pair that diverges
-# past this isn't a line-by-line fix job -- it needs a proper re-check --
-# so the tail is summarised. Scope to the one file with --page to see all
-# of it.
+# past this isn't a line-by-line fix job -- open the two files and
+# reconcile them -- so the tail is summarised rather than dumped.
 _MAX_FINDING_LINES = 30
 
 
 def _cap_diff_lines(lines):
-    """`lines` as-is if short, else the first _MAX_FINDING_LINES followed
-    by a one-line 'scope with --page' summary of the rest."""
+    """`lines` as-is if short, else the first _MAX_FINDING_LINES with a
+    one-line note of how many were dropped."""
     if len(lines) <= _MAX_FINDING_LINES:
         return list(lines)
     return list(lines[:_MAX_FINDING_LINES]) + [
-        f"    ... and {len(lines) - _MAX_FINDING_LINES} more; scope to this "
-        f"file with --page to see everything"]
+        f"    ... and {len(lines) - _MAX_FINDING_LINES} more, not shown -- "
+        f"open the two files to compare"]
 
 
 def _skeleton_diff_lines(en_skel, ru_skel, en_file, ru_file):
@@ -3530,8 +3529,9 @@ def check_pages_table_cell_periods() -> bool:
                     if is_admonition or _STRUCT_LIST_MARKER_RE.match(stripped):
                         cell_exempt = True
                     if is_admonition and pre_admonition_prose is None and last_prose is not None:
+                        name_m = _ADMONITION_NAME_RE.match(stripped)
                         pre_admonition_prose = (*last_prose,
-                                                _ADMONITION_NAME_RE.match(stripped).group(1))
+                                                name_m.group(1) if name_m else "admonition")
 
                     # Track the last plain-prose line of the cell (for the
                     # missing-period-before-a-trailing-NOTE check).
@@ -6094,12 +6094,10 @@ def _v2_list(what):
             print(f"  {t:<10}{desc}")
         return
     if what == "modules":
-        print("list: module discovery moved -- use 'docs_tool.py --list-modules'", file=sys.stderr)
-        sys.exit(2)
+        _usage_error("list: module discovery moved -- use 'docs_tool.py --list-modules'")
     if what not in (None, "families"):
         hint = f" -- did you mean 'docs_tool show {what}'?" if _resolve_check_name(what) else ""
-        print(f"list: unknown argument '{what}' (expected: rules, targets){hint}", file=sys.stderr)
-        sys.exit(2)
+        _usage_error(f"list: unknown argument '{what}' (expected: rules, targets){hint}")
 
     for i, (fam, rules) in enumerate(FAMILIES.items()):
         if i:
@@ -6158,9 +6156,8 @@ def _v2_show(name):
         return _v2_show_all()
     key = _resolve_check_name(name)
     if key is None:
-        print(f"unknown rule: {name}  (run 'docs_tool list' for the map, or "
-              f"'docs_tool show all' for every rule with examples)", file=sys.stderr)
-        sys.exit(2)
+        _usage_error(f"unknown rule: {name}  (run 'docs_tool list' for the map, "
+                     f"or 'docs_tool show all' for every rule with examples)")
     fam = _family_of(_rule_of(key)) or "?"
     disp = _TIER_DISPOSITION.get(_tier_of(fam), "?")
     beta = "  [beta -- treat findings as a review list, not a hard gate]" if key in BETA_CHECKS else ""
@@ -6199,14 +6196,12 @@ def _main_v2():
     picked = {rule for rule in _ALL_RULES if getattr(args, rule.replace("-", "_"))}
 
     if picked and len(families) != 1:
-        print("check: --<rule> flags need exactly one family "
-              f"(got: {' '.join(families)})", file=sys.stderr)
-        sys.exit(2)
+        _usage_error("check: --<rule> flags need exactly one family "
+                     f"(got: {' '.join(families)})")
     bad = {rule for rule in picked if _family_of(rule) != families[0]}
     if bad:
-        print(f"check {families[0]}: unknown flag(s) for this family: "
-              f"{', '.join('--' + b for b in sorted(bad))}", file=sys.stderr)
-        sys.exit(2)
+        _usage_error(f"check {families[0]}: unknown flag(s) for this family: "
+                     f"{', '.join('--' + b for b in sorted(bad))}")
 
     selected = []
     for fam in families:
@@ -6214,9 +6209,8 @@ def _main_v2():
     seen = set()
     selected = [k for k in selected if not (k in seen or seen.add(k))]
     if not selected:
-        print(f"check: that selection matched no rules "
-              f"({' '.join(families)}, --target={args.target}).", file=sys.stderr)
-        sys.exit(2)
+        _usage_error(f"check: that selection matched no rules "
+                     f"({' '.join(families)}, --target={args.target}).")
 
     _require_a_docs_tree()
     _apply_page_filter(args.page)
