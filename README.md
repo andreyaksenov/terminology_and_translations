@@ -33,7 +33,8 @@ the `chmod` and run `python docs_tool.py …`.
 ```
 
 Run with no arguments to print the full command list. A run exits `0` if everything
-passed, `1` if any rule found something, `2` on a usage error. `list` labels each
+passed, `1` if any rule found something, `2` on a usage or setup error (bad flag,
+missing glossary, wrong directory — nothing was checked). `list` labels each
 family `suggest: block` / `suggest: warn` — that's advice for your pre-commit hook,
 not something the tool enforces; the exit code is the same for every family.
 

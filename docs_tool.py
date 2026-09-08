@@ -70,6 +70,14 @@ except ImportError:
 EN_MODULES_ROOT = Path("en/modules")
 RU_MODULES_ROOT = Path("ru/modules")
 
+
+def _usage_error(msg):
+    """Print `msg` to stderr and exit 2 -- a usage / environment problem
+    where nothing was checked. Distinct from exit 1, which means a check
+    ran and found something."""
+    print(msg, file=sys.stderr)
+    sys.exit(2)
+
 CYRILLIC_RE = re.compile(r'[Ѐ-ӿ]')
 EN_EM_DASH_RE = re.compile(r'[–—]')
 
@@ -145,7 +153,7 @@ def _load_external_components(specs):
     components = {}
     for spec in specs or []:
         if "=" not in spec:
-            sys.exit(f"error: --external-root must be NAME=PATH, got: {spec!r}")
+            _usage_error(f"error: --external-root must be NAME=PATH, got: {spec!r}")
         name, _, path_str = spec.partition("=")
         repo_root = Path(path_str)
         en_root = repo_root / "en" / "modules"
@@ -232,7 +240,7 @@ def _load_glossary(paths):
         path = Path(path_str)
         text = _read_text(path)
         if text is None:
-            sys.exit(f"error: --glossary {path_str}: file not found or unreadable")
+            _usage_error(f"error: --glossary {path_str}: file not found or unreadable")
         data_lines = [l for l in text.splitlines() if l.strip() and not l.lstrip().startswith("#")]
         if not data_lines:
             continue
@@ -362,7 +370,7 @@ def _git_uncommitted_adoc_stems():
     what's about to be committed instead of the whole site."""
     result = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
     if result.returncode != 0:
-        sys.exit("error: --page UNCOMMITTED requires running inside a git repository")
+        _usage_error("error: --page UNCOMMITTED requires running inside a git repository")
     stems = set()
     for line in result.stdout.splitlines():
         path = line[3:]
@@ -3692,7 +3700,7 @@ def check_pages_terminology() -> bool:
     if neither is available, since that's a misconfiguration, not "nothing
     to check"."""
     if not GLOSSARY:
-        sys.exit("error: --check-pages-terminology requires --glossary PATH "
+        _usage_error("error: --check-pages-terminology requires --glossary PATH "
                   "(no *-glossary.psv found in the current directory to default to either)")
 
     term_re = _build_glossary_term_re(GLOSSARY)
@@ -5314,7 +5322,7 @@ def apply_orphan_markers(ru_lines, orphaned, already_reported):
 def ru_path_for(en_path: Path) -> Path:
     s = str(en_path)
     if EN_MARK not in s:
-        sys.exit(f"error: path does not look like an EN page (missing '{EN_MARK}'): {en_path}")
+        _usage_error(f"error: path does not look like an EN page (missing '{EN_MARK}'): {en_path}")
     return Path(s.replace(EN_MARK, RU_MARK, 1))
 
 
@@ -5340,7 +5348,7 @@ def _resolve_page_stem(name_parts):
 
 def run_sync(en_file: str, dry_run: bool):
     if not en_file.endswith(".adoc"):
-        sys.exit(f"error: --sync {en_file!r} must end with .adoc -- "
+        _usage_error(f"error: --sync {en_file!r} must end with .adoc -- "
                   f"AsciiDoc/Antora has no separate topic-id, the filename is the identifier.")
     en_path = Path(en_file)
     if not en_path.is_file():
@@ -5354,9 +5362,9 @@ def run_sync(en_file: str, dry_run: bool):
             en_path = matches[0]
         elif len(matches) > 1:
             listing = "\n".join(f"  {m}" for m in sorted(str(m) for m in matches))
-            sys.exit(f"error: --sync {en_file!r} matches multiple files -- pass a full path to disambiguate:\n{listing}")
+            _usage_error(f"error: --sync {en_file!r} matches multiple files -- pass a full path to disambiguate:\n{listing}")
         else:
-            sys.exit(f"error: not a file, and no page/partial named {en_file!r}: {en_path}")
+            _usage_error(f"error: not a file, and no page/partial named {en_file!r}: {en_path}")
 
     ru_path = ru_path_for(en_path)
     en_lines = (_read_text(en_path) or "").splitlines()
@@ -5541,6 +5549,18 @@ def _complete_family(prefix="", **kwargs):
     return {k: v for k, v in FAMILY_DESC.items() if k.startswith(prefix)}
 
 
+def _complete_show_name(prefix="", **kwargs):
+    """argcomplete completer for the 'show' RULE positional: every rule
+    name, its rule ID, and 'all'."""
+    cands = {"all", *_ALL_RULES, *RULE_IDS.values()}
+    return sorted(c for c in cands if c.startswith(prefix))
+
+
+def _complete_list_what(prefix="", **kwargs):
+    """argcomplete completer for the optional 'list' argument."""
+    return [w for w in ("rules", "targets") if w.startswith(prefix)]
+
+
 if argcomplete:
     class _CheckCompletionFinder(argcomplete.CompletionFinder):
         """The --<rule> flags are registered with help=SUPPRESS (so `check -h`
@@ -5645,7 +5665,7 @@ def _require_a_docs_tree():
     error (same reasoning as the --external-root warning above)."""
     if discover_module_names():
         return
-    sys.exit(f"error: no {EN_MODULES_ROOT}/ or {RU_MODULES_ROOT}/ found in "
+    _usage_error(f"error: no {EN_MODULES_ROOT}/ or {RU_MODULES_ROOT}/ found in "
              f"{Path.cwd()} -- run docs_tool from the docs repo root")
 
 
@@ -5886,11 +5906,13 @@ def _build_v2_parser():
     _add_link_args(c)
 
     sh = sub.add_parser("show", help="One rule's rationale + examples, or 'show all' for every rule.")
-    sh.add_argument("name", metavar="RULE", help="e.g. 'no-yo', 'ST01', or 'all'.")
+    sh.add_argument("name", metavar="RULE", help="e.g. 'no-yo', 'ST01', or 'all'."
+                    ).completer = _complete_show_name
 
     ls = sub.add_parser("list", help="The family/rule map (also 'list rules' / 'list targets').")
     ls.add_argument("what", nargs="?", metavar="[rules|targets]",
-                    help="Omit for the family tree; 'rules' / 'targets' for flat lists.")
+                    help="Omit for the family tree; 'rules' / 'targets' for flat lists."
+                    ).completer = _complete_list_what
 
     s = sub.add_parser("sync", help="Align a RU page to its EN counterpart (beta).")
     sy = s.add_argument("file", metavar="EN_FILE",

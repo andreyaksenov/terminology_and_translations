@@ -1502,9 +1502,11 @@ class ResolvePageStemQualifiedNameTests(unittest.TestCase):
     def test_run_sync_bare_name_still_ambiguous(self):
         self.write("en/modules/ROOT/pages/reference/gp_toolkit/gp_ao.adoc")
         self.write("en/modules/ROOT/pages/reference/utils/gp_ao.adoc")
-        with self.assertRaises(SystemExit) as ctx:
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
             dt.run_sync("gp_ao.adoc", dry_run=True)
-        self.assertIn("matches multiple files", str(ctx.exception))
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("matches multiple files", buf.getvalue())
 
 
 class PagesTerminologyTests(FixtureTestCase):
@@ -1515,8 +1517,9 @@ class PagesTerminologyTests(FixtureTestCase):
 
     def test_missing_glossary_exits(self):
         dt.GLOSSARY = {}
-        with self.assertRaises(SystemExit):
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(io.StringIO()):
             dt.check_pages_terminology()
+        self.assertEqual(ctx.exception.code, 2)   # usage error, not a finding
 
     def test_missing_glossary_in_multi_check_run_skips_not_aborts(self):
         """A multi-family `check` or `--all-checks` sweeps terminology in; with
@@ -1996,17 +1999,21 @@ class RunSyncStemResolutionTests(unittest.TestCase):
         not silently treated as a stem to search for."""
         self.write("en/modules/ROOT/pages/foo.adoc", "== Title\n\nText.\n")
 
-        with self.assertRaises(SystemExit) as ctx:
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
             dt.run_sync("foo", dry_run=True)
-        self.assertIn("must end with .adoc", str(ctx.exception))
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("must end with .adoc", buf.getvalue())
 
     def test_ambiguous_filename_across_modules_exits_with_candidate_list(self):
         self.write("en/modules/ROOT/pages/foo.adoc", "== Title\n\nText.\n")
         self.write("en/modules/how-to/pages/foo.adoc", "== Title\n\nText.\n")
 
-        with self.assertRaises(SystemExit) as ctx:
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
             dt.run_sync("foo.adoc", dry_run=True)
-        message = str(ctx.exception)
+        self.assertEqual(ctx.exception.code, 2)
+        message = buf.getvalue()
         self.assertIn("matches multiple files", message)
         self.assertIn("ROOT", message)
         self.assertIn("how-to", message)
@@ -2014,9 +2021,11 @@ class RunSyncStemResolutionTests(unittest.TestCase):
     def test_unresolvable_filename_exits_with_clear_error(self):
         self.write("en/modules/ROOT/pages/foo.adoc", "== Title\n\nText.\n")
 
-        with self.assertRaises(SystemExit) as ctx:
+        buf = io.StringIO()
+        with self.assertRaises(SystemExit) as ctx, contextlib.redirect_stderr(buf):
             dt.run_sync("no-such-page.adoc", dry_run=True)
-        self.assertIn("no page/partial named", str(ctx.exception))
+        self.assertEqual(ctx.exception.code, 2)
+        self.assertIn("no page/partial named", buf.getvalue())
 
     def test_full_path_still_takes_precedence_over_filename_search(self):
         """An existing full path is used as-is, without going through
@@ -2406,6 +2415,10 @@ class NoDocsTreeTests(unittest.TestCase):
         self.assertNotEqual(code, 0)
         self.assertNotIn("OK:", out)
 
+    def test_refusal_is_a_usage_error_not_a_finding(self):
+        """Exit 2 (nothing was checked), not 1 (a check found something)."""
+        self.assertEqual(self._run("check", "l10n")[0], 2)
+
     def test_list_and_show_still_work_anywhere(self):
         """They describe the rule set, not the content -- no tree needed."""
         self.assertEqual(self._run("list")[0], 0)
@@ -2509,6 +2522,15 @@ class CheckRuleCompletionTests(unittest.TestCase):
         comps = self._complete("docs_tool.py check chars markup ")
         self.assertNotIn("--no-cyrillic", comps)
         self.assertNotIn("--backticks", comps)
+
+    def test_show_completes_rule_names_and_ids(self):
+        comps = self._complete("docs_tool.py show ")
+        self.assertLessEqual({"all", "no-yo", "structure", "LN06"}, comps)
+
+    def test_list_completes_its_two_subcommands(self):
+        comps = self._complete("docs_tool.py list ")
+        self.assertLessEqual({"rules", "targets"}, comps)
+        self.assertNotIn("docs_tool.py", comps)   # not falling back to filenames
 
 
 class RunSyncGitRewordTests(unittest.TestCase):
