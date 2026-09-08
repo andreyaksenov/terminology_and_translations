@@ -2545,22 +2545,49 @@ def _normalize_parity_url(url):
     return f"https://{host}{path}{m.group(4)}"
 
 
+def _module_of(path: Path):
+    """The Antora module a pages/partials file lives in --
+    `<lang>/modules/<module>/pages/...` -> `<module>`, or None."""
+    parts = path.parts
+    for i in range(len(parts) - 1, 1, -1):
+        if parts[i] in ("pages", "partials") and parts[i - 2] == "modules":
+            return parts[i - 1]
+    return None
+
+
+def _normalize_xref_target(target, own_module):
+    """Drop the `#fragment` (Antora derives it from the translated
+    heading) and a leading `<own-module>:` self-qualifier -- from a page
+    in module ROOT, `xref:ROOT:x.adoc` and `xref:x.adoc` resolve to the
+    same page, and the two forms are used interchangeably."""
+    target = target.split("#", 1)[0]
+    if own_module and target.startswith(f"{own_module}:"):
+        rest = target[len(own_module) + 1:]
+        # only when what's left is a plain (module-less) target, so a
+        # component ref that happens to start with the module name is safe
+        if ":" not in rest:
+            target = rest
+    return target
+
+
 def _link_parity_tokens(path: Path):
     """{token: [line numbers]} for every language-invariant link on a
-    comment/code-filtered line: xref target files (the `#fragment` is
-    dropped -- Antora derives a section anchor from the heading text,
-    which is translated), inline image targets, and external URLs. Image
-    and URL targets are normalised for the `/en/`|`/ru/` and `_en`|`_ru`
-    localisation patterns."""
+    comment/code-filtered line: xref target files (fragment and
+    own-module self-qualifier dropped -- see _normalize_xref_target),
+    inline image targets, and external URLs. Image and URL targets are
+    normalised for the `/en/`|`/ru/` and `_en`|`_ru` localisation
+    patterns."""
     lines = _read_lines(path)
     if lines is None:
         return {}
+    own_module = _module_of(path)
     excluded = _excluded_ref_lines(path)
     hits = {}
     for lineno, line in enumerate(lines, 1):
         if lineno in excluded:
             continue
-        toks = [f"xref:{t.split('#', 1)[0]}" for t in _XREF_TARGET_RE.findall(line)]
+        toks = [f"xref:{_normalize_xref_target(t, own_module)}"
+                for t in _XREF_TARGET_RE.findall(line)]
         toks += [f"image:{_ASSET_LANG_TAG_RE.sub(r'_XX\1', t)}"
                  for t in _INLINE_IMAGE_TARGET_RE.findall(line)]
         toks += [f"url:{_normalize_parity_url(u)}"
@@ -2598,15 +2625,16 @@ def check_pages_link_parity(verbose=False) -> bool:
     carries a clickable `path:line` (the first hit on each side);
     --verbose adds a sub-line for each further occurrence.
 
-    Folded, not reported (deliberate localisation): a `#fragment` on an
-    xref (Antora derives it from the translated heading), a `/en/`|`/ru/`
+    Folded, not reported: a `#fragment` on an xref (Antora derives it from
+    the translated heading), a redundant `<own-module>:` xref self-qualifier
+    (`xref:ROOT:x.adoc` == `xref:x.adoc` from a ROOT page), a `/en/`|`/ru/`
     URL path segment or `en.`/`ru.` host, a Wikipedia article, and an
     `_en`|`_ru` tag on an image filename.
 
     Beta: a repo that deliberately links the EN docs site from RU pages
-    (or vice versa), or writes an xref sometimes module-qualified and
-    sometimes not, shows up here -- treat the output as a review list.
-    Not compared: targets inside ---- / .... blocks or // comments."""
+    (or vice versa), or writes a cross-module xref sometimes qualified and
+    sometimes not, still shows up here -- treat the output as a review
+    list. Not compared: targets inside ---- / .... blocks or // comments."""
     ok = True
     mismatch_count = 0
     for en_file, ru_file in _en_ru_page_pairs():
