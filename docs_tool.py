@@ -392,22 +392,32 @@ def _format_size(num_bytes: int) -> str:
     return f"{size:.1f}GB"
 
 
-def _labeled_unified_diff(en_lines, ru_lines, en_label, ru_label, n=1):
-    """Render a unified diff with each changed line prefixed by its source
-    file label, matching the `sed -e "s|^-|- $en_file:  |" ...` treatment
-    used throughout the original shell scripts so findings are easy to jump
-    to directly from the terminal."""
-    diff = difflib.unified_diff(en_lines, ru_lines, lineterm="", n=n)
+def _diff_pair_header(en_file, ru_file) -> str:
+    """The two-line `DIFF` banner naming an EN/RU pair. The `-` / `+` line
+    up with the marks the diff rows below use for each side, so the path
+    doesn't have to be repeated on every row. The bare paths stay
+    click-to-open in the terminal."""
+    return f"DIFF  - {en_file}\n      + {ru_file}"
+
+
+def _unified_diff_lines(en_lines, ru_lines, n=1):
+    """Unified diff of two line lists; `-` is EN, `+` is RU (matching the
+    `_diff_pair_header` banner). The `@@` hunk markers are kept for line
+    context. Everything before the first `@@` is skipped rather than
+    matched by prefix -- a `.sql` content line can itself start with `--`,
+    which would otherwise be mistaken for the `---` file header."""
     out = []
-    for line in diff:
-        if line.startswith(("---", "+++")):
+    started = False
+    for line in difflib.unified_diff(en_lines, ru_lines, lineterm="", n=n):
+        if not started:
+            started = line.startswith("@@")
+            if started:
+                out.append(f"      {line}")
             continue
-        if line.startswith("-"):
-            out.append(f"    - {en_label}:  {line[1:]}")
-        elif line.startswith("+"):
-            out.append(f"    + {ru_label}:  {line[1:]}")
+        if line.startswith(("-", "+")):
+            out.append(f"    {line[0]} {line[1:]}")
         else:
-            out.append(f"          {line[1:] if line.startswith(' ') else line}")
+            out.append(f"      {line[1:] if line.startswith(' ') else line}")
     return out
 
 
@@ -531,26 +541,24 @@ def check_examples_parity() -> bool:
                 en_blanked = _blank_sql_comments(en_text)
                 ru_blanked = _blank_sql_comments(ru_text)
                 if en_blanked != ru_blanked:
-                    print(f"DIFF     {en_file}")
-                    print(f"         {ru_file}")
+                    print(_diff_pair_header(en_file, ru_file))
                     ok = False
                     mismatch_count += 1
                     print("\n".join(_cap_diff_lines(
-                        _labeled_unified_diff(en_blanked, ru_blanked, en_file, ru_file))))
+                        _unified_diff_lines(en_blanked, ru_blanked))))
                     print()
                 continue
 
             en_bytes = en_file.read_bytes()
             ru_bytes = ru_file.read_bytes()
             if en_bytes != ru_bytes:
-                print(f"DIFF     {en_file}")
-                print(f"         {ru_file}")
+                print(_diff_pair_header(en_file, ru_file))
                 ok = False
                 mismatch_count += 1
                 en_lines = (_read_text(en_file) or "").splitlines()
                 ru_lines = (_read_text(ru_file) or "").splitlines()
                 print("\n".join(_cap_diff_lines(
-                    _labeled_unified_diff(en_lines, ru_lines, en_file, ru_file))))
+                    _unified_diff_lines(en_lines, ru_lines))))
                 print()
 
         for ru_file in _iter_files(ru_examples):
@@ -726,16 +734,17 @@ def _cap_diff_lines(lines):
     if len(lines) <= _MAX_FINDING_LINES:
         return list(lines)
     return list(lines[:_MAX_FINDING_LINES]) + [
-        f"         ... and {len(lines) - _MAX_FINDING_LINES} more; scope to "
-        f"this file with --page to see everything"]
+        f"    ... and {len(lines) - _MAX_FINDING_LINES} more; scope to this "
+        f"file with --page to see everything"]
 
 
-def _skeleton_diff_lines(en_skel, ru_skel, en_label, ru_label):
-    """Like _labeled_unified_diff, but diffs the skeleton *content* only
+def _skeleton_diff_lines(en_skel, ru_skel):
+    """Like _unified_diff_lines, but diffs the skeleton *content* only
     (ignoring line numbers) so that lines shifting by a line or two --
     normal given EN/RU text length differences -- don't make every
-    subsequent equal entry look like a spurious diff. Line numbers are
-    still shown, just not used to decide what counts as a difference."""
+    subsequent equal entry look like a spurious diff. The source line
+    number is shown (right-aligned) for context but isn't used to decide
+    what counts as a difference; `-` is EN, `+` is RU."""
     en_plain = [s for _, s in en_skel]
     ru_plain = [s for _, s in ru_skel]
     sm = difflib.SequenceMatcher(a=en_plain, b=ru_plain, autojunk=False)
@@ -744,9 +753,9 @@ def _skeleton_diff_lines(en_skel, ru_skel, en_label, ru_label):
         if tag == "equal":
             continue
         for i in range(i1, i2):
-            out.append(f"    - {en_label}:  {en_skel[i][0]}:{en_skel[i][1]}")
+            out.append(f"    - {en_skel[i][0]:>4}  {en_skel[i][1]}")
         for j in range(j1, j2):
-            out.append(f"    + {ru_label}:  {ru_skel[j][0]}:{ru_skel[j][1]}")
+            out.append(f"    + {ru_skel[j][0]:>4}  {ru_skel[j][1]}")
     return out
 
 
@@ -757,10 +766,8 @@ def _compare_skeleton_pair(en_file: Path, ru_file: Path, skeleton_fn) -> bool:
     ru_plain = [s for _, s in ru_skel]
     if en_plain == ru_plain:
         return True
-    print(f"DIFF     {en_file}")
-    print(f"         {ru_file}")
-    diff = _skeleton_diff_lines(en_skel, ru_skel, en_file, ru_file)
-    print("\n".join(_cap_diff_lines(diff)))
+    print(_diff_pair_header(en_file, ru_file))
+    print("\n".join(_cap_diff_lines(_skeleton_diff_lines(en_skel, ru_skel))))
     print()
     return False
 

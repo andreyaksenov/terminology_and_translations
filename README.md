@@ -89,7 +89,7 @@ by kind:
 | `BROKEN` | a reference (or, in `check links`, an external URL) that doesn't resolve |
 | `ORPHANED` | a file nothing points at — no line, the whole file is the finding |
 | `MISSING` | an EN or RU counterpart that doesn't exist |
-| `DIFF` | the EN/RU pair that diverged, one path per line |
+| `DIFF` | an EN/RU pair that diverged — the two paths on the banner (`-` EN, `+` RU), then the differing lines |
 | `REDIRECT` `UNREACHABLE` `VPN?` | `check links` only — see the `links` family below |
 
 Where a specific line is meaningful it's `path:line` or `path:line:col`, which most
