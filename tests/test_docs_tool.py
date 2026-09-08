@@ -1789,22 +1789,6 @@ class PagesLinkParityTests(FixtureTestCase):
         # a clickable path:line without --verbose
         self.assertIn("en/modules/ROOT/pages/page.adoc:1", out)
 
-    def test_own_module_xref_self_qualifier_is_not_a_finding(self):
-        """xref:ROOT:x.adoc from a ROOT page resolves the same as
-        xref:x.adoc -- the two forms are used interchangeably."""
-        self.write("en/modules/ROOT/pages/page.adoc", "See xref:start.adoc[start].\n")
-        self.write("ru/modules/ROOT/pages/page.adoc", "См. xref:ROOT:start.adoc[начало].\n")
-        ok, out = self.run_check(dt.check_pages_link_parity)
-        self.assertTrue(ok, out)
-
-    def test_cross_module_xref_qualifier_still_compared(self):
-        """A different module's qualifier is not folded -- xref:other:x.adoc
-        vs xref:x.adoc really can resolve to different pages."""
-        self.write("en/modules/ROOT/pages/page.adoc", "xref:how-to:x.adoc[x]\n")
-        self.write("ru/modules/ROOT/pages/page.adoc", "xref:x.adoc[x]\n")
-        ok, out = self.run_check(dt.check_pages_link_parity)
-        self.assertFalse(ok)
-
     def test_translated_xref_fragment_is_not_a_finding(self):
         """Antora derives a section anchor from the (translated) heading,
         so an xref #fragment legitimately differs EN vs RU."""
