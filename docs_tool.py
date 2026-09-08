@@ -2570,12 +2570,20 @@ def _link_parity_tokens(path: Path):
     return hits
 
 
-def _parity_ref_lines(en_file, en_lines, ru_file, ru_lines):
-    """Indented `path:line` refs for one differing token -- every physical
-    line it sits on, EN then RU. One clickable reference per line so a
-    --verbose finding opens straight from an IDE / editor terminal."""
-    return ([f"        {en_file}:{n}" for n in en_lines]
-            + [f"        {ru_file}:{n}" for n in ru_lines])
+def _parity_refs(en_file, en_lines, ru_file, ru_lines, verbose):
+    """Clickable `path:line` references for one differing token, so a
+    finding opens straight from an IDE / editor terminal. Returns
+    (row_suffix, extra_lines):
+
+    * always a compact suffix -- the first hit on each side -- appended
+      to the token's own row;
+    * under --verbose, one indented sub-line per further occurrence."""
+    sides = [(en_file, sorted(set(en_lines))), (ru_file, sorted(set(ru_lines)))]
+    suffix = "   " + "  ".join(f"{f}:{ns[0]}" for f, ns in sides if ns)
+    extra = []
+    if verbose:
+        extra = [f"        {f}:{n}" for f, ns in sides for n in ns[1:]]
+    return (suffix if suffix.strip() else ""), extra
 
 
 def check_pages_link_parity(verbose=False) -> bool:
@@ -2586,8 +2594,9 @@ def check_pages_link_parity(verbose=False) -> bool:
     URLs. Link *text* is translated and ignored; only the destination is
     compared. A mismatch means a cross-reference or link was dropped,
     added, or retargeted in translation -- e.g. RU prose that silently
-    loses an xref the EN reader gets. Honours --page; --verbose lists
-    every hit as a clickable `path:line`.
+    loses an xref the EN reader gets. Honours --page. Every finding
+    carries a clickable `path:line` (the first hit on each side);
+    --verbose adds a sub-line for each further occurrence.
 
     Folded, not reported (deliberate localisation): a `#fragment` on an
     xref (Antora derives it from the translated heading), a `/en/`|`/ru/`
@@ -2622,10 +2631,10 @@ def check_pages_link_parity(verbose=False) -> bool:
         for t in sorted(set(en_c) | set(ru_c)):
             if en_c[t] == ru_c[t]:
                 continue
-            rows.append(f"    EN {en_c[t]} / RU {ru_c[t]}   {t}")
-            if verbose:
-                rows += _parity_ref_lines(en_file, en_hits.get(t, []),
-                                          ru_file, ru_hits.get(t, []))
+            suffix, extra = _parity_refs(en_file, en_hits.get(t, []),
+                                         ru_file, ru_hits.get(t, []), verbose)
+            rows.append(f"    EN {en_c[t]} / RU {ru_c[t]}   {t}{suffix}")
+            rows += extra
         _emit_parity_rows(rows, verbose)
         print()
         ok = False
@@ -2719,8 +2728,9 @@ def check_pages_literal_parity(verbose=False) -> bool:
     Reported per file: CHANGED (a near-identical pair -- a likely
     typo/case slip), then EN-only, then RU-only literals. Presence is
     what's compared: a literal legitimately repeated a different number of
-    times on each side is normal and not a finding. --verbose lists every
-    hit as a clickable `path:line`.
+    times on each side is normal and not a finding. Every finding carries
+    a clickable `path:line` (the first hit on each side); --verbose adds a
+    sub-line for each further occurrence.
 
     Beta: RU technical prose that back-ticks a term EN left bare (or the
     reverse) surfaces here and usually isn't a translation bug -- treat
@@ -2750,17 +2760,17 @@ def check_pages_literal_parity(verbose=False) -> bool:
         print(f"         {ru_file}")
         rows = []
         for a, b in changed:
-            rows.append(f"    CHANGED   `{a}`  ->  `{b}`")
-            if verbose:
-                rows += _parity_ref_lines(en_file, en_hits[a], ru_file, ru_hits[b])
+            suffix, extra = _parity_refs(en_file, en_hits[a], ru_file, ru_hits[b], verbose)
+            rows.append(f"    CHANGED   `{a}`  ->  `{b}`{suffix}")
+            rows += extra
         for a in en_only:
-            rows.append(f"    EN only   `{a}`")
-            if verbose:
-                rows += _parity_ref_lines(en_file, en_hits[a], ru_file, [])
+            suffix, extra = _parity_refs(en_file, en_hits[a], ru_file, [], verbose)
+            rows.append(f"    EN only   `{a}`{suffix}")
+            rows += extra
         for b in ru_only:
-            rows.append(f"    RU only   `{b}`")
-            if verbose:
-                rows += _parity_ref_lines(en_file, [], ru_file, ru_hits[b])
+            suffix, extra = _parity_refs(en_file, [], ru_file, ru_hits[b], verbose)
+            rows.append(f"    RU only   `{b}`{suffix}")
+            rows += extra
         _emit_parity_rows(rows, verbose)
         print()
         ok = False

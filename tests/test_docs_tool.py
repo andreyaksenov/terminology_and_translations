@@ -1786,6 +1786,8 @@ class PagesLinkParityTests(FixtureTestCase):
         ok, out = self.run_check(dt.check_pages_link_parity)
         self.assertFalse(ok)
         self.assertIn("xref:vacuum.adoc", out)
+        # a clickable path:line without --verbose
+        self.assertIn("en/modules/ROOT/pages/page.adoc:1", out)
 
     def test_translated_xref_fragment_is_not_a_finding(self):
         """Antora derives a section anchor from the (translated) heading,
@@ -1844,6 +1846,7 @@ class PagesLiteralParityTests(FixtureTestCase):
         ok, out = self.run_check(dt.check_pages_literal_parity)
         self.assertFalse(ok)
         self.assertIn("`SELECT`", out)
+        self.assertIn("en/modules/ROOT/pages/page.adoc:1", out)  # clickable, no --verbose
 
     def test_trailing_parens_are_normalized(self):
         self.write("en/modules/ROOT/pages/page.adoc", "Call `get_part_name()`.\n")
