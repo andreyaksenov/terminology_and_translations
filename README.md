@@ -20,7 +20,7 @@ the `chmod` and run `python docs_tool.py …`.
 
 ```
 ./docs_tool.py check <family> [<family> ...] [--<rule> ...]
-                     [--target NAME] [--verbose] [--page NAME ...]
+                     [--target NAME] [--page NAME ...]
                      [--glossary PATH ...] [--external-root NAME=PATH ...]
                      [--offline] [--timeout N] [--show-unverified]        # check links
                      [--allow-domain HOST ...] [--insecure] [--link-cache PATH]
@@ -55,7 +55,7 @@ Rules are grouped into seven **families**:
 ./docs_tool.py check chars markup            # several families
 ./docs_tool.py check chars markup refs style terms l10n   # all the offline families
 ./docs_tool.py check links                   # external links, on their own (network)
-./docs_tool.py check l10n --structure --verbose --page resource_groups.adoc
+./docs_tool.py check l10n --structure --page resource_groups.adoc
 ```
 
 There is no `check all` — name the families you want. `links` reaches the network
@@ -153,11 +153,10 @@ reaches the network and only runs when named.
   ```
 
 - **`CH03` · `check chars --no-invisible`** — no zero-width / invisible /
-  bidi-control Unicode characters. `--verbose` marks the character in the line.
+  bidi-control Unicode characters. Each hit line is printed with the character marked.
   ```bash
   ./docs_tool.py check chars --no-invisible
   ./docs_tool.py check chars --no-invisible --page auth.adoc
-  ./docs_tool.py check chars --no-invisible --verbose
   ```
 
 - **`CH04` · `check chars --dashes`** — no literal en dash (`–`) or em dash (`—`);
@@ -172,7 +171,6 @@ reaches the network and only runs when named.
   ```bash
   ./docs_tool.py check chars --homoglyphs
   ./docs_tool.py check chars --homoglyphs --page resource_groups.adoc
-  ./docs_tool.py check chars --homoglyphs --verbose
   ```
 
 ### `markup` — AsciiDoc syntax
@@ -248,7 +246,6 @@ Heuristic family — treat findings as a review list, not a hard gate.
   ```bash
   ./docs_tool.py check style --file-path-italics
   ./docs_tool.py check style --file-path-italics --page resource_groups.adoc
-  ./docs_tool.py check style --file-path-italics --verbose
   ```
 
 - **`ST03` · `check style --table-cell-periods`** · beta — a table cell's last
@@ -265,11 +262,11 @@ Needs a glossary: `--glossary PATH` (pipe-delimited `en|ru|ru_pattern|note`), or
 
 - **`TM01` · `check terms`** · beta — flags an EN glossary term whose aligned RU
   line uses a non-house-style translation (or leaves some repeats untranslated).
-  `--verbose` prints the EN/RU line pair.
+  The EN/RU line pair is printed under each finding.
   ```bash
   ./docs_tool.py check terms
   ./docs_tool.py check terms --glossary greengagedb-glossary.psv
-  ./docs_tool.py check terms --verbose --page resource_groups.adoc
+  ./docs_tool.py check terms --page resource_groups.adoc
   ```
 
 ### `l10n` — EN↔RU parity
@@ -283,34 +280,30 @@ Needs a glossary: `--glossary PATH` (pipe-delimited `en|ru|ru_pattern|note`), or
 
 - **`LN02` · `check l10n --structure`** · beta — EN/RU structural skeletons
   (headings, blocks, `include::`) must match, catching drift when line counts don't.
-  Prints a 20-line diff preview per file; `--verbose` shows the full diff.
+  Prints the diff, capped at 30 lines per file (`--page <file>` for the rest).
   ```bash
   ./docs_tool.py check l10n --structure
   ./docs_tool.py check l10n --structure --page resource_groups.adoc
-  ./docs_tool.py check l10n --structure --verbose
   ```
 
 - **`LN03` · `check l10n --untranslated`** · beta — RU lines byte-identical to
   their EN counterpart (`UNTRANSLATED`), plus RU lines carrying English stopwords
-  like `the`/`and`/`with` (`SUSPECT`). `--verbose` names the matched stopword.
+  like `the`/`and`/`with` (`SUSPECT`). Each `SUSPECT` line ends with the matched stopword.
   ```bash
   ./docs_tool.py check l10n --untranslated
   ./docs_tool.py check l10n --untranslated --page resource_groups.adoc
-  ./docs_tool.py check l10n --untranslated --verbose
   ```
 
 - **`LN04` · `check l10n --examples`** — EN and RU `examples/` must hold the same
   files (byte-for-byte; `.sql` comments may differ). Whole-site — ignores `--page`.
   ```bash
   ./docs_tool.py check l10n --examples
-  ./docs_tool.py check l10n --examples --verbose
   ```
 
 - **`LN05` · `check l10n --nav`** — EN and RU `nav.adoc` structure (list depth,
   `xref:`/`include::` targets) must match; translated labels ignored. Ignores `--page`.
   ```bash
   ./docs_tool.py check l10n --nav
-  ./docs_tool.py check l10n --nav --verbose
   ```
 
 - **`LN06` · `check l10n --links`** · beta — EN and RU must reference the same
@@ -322,8 +315,8 @@ Needs a glossary: `--glossary PATH` (pipe-delimited `en|ru|ru_pattern|note`), or
   Wikipedia article, an `_en`|`_ru` image-filename tag. Beta: a repo that
   deliberately links its EN docs site from RU pages, or writes an xref sometimes
   module-qualified and sometimes not, shows up here. Every finding carries a
-  clickable `path:line` (first hit on each side on the row, further occurrences
-  one sub-line each) — no `--verbose` needed.
+  clickable `path:line` (first hit on each side on the row, further
+  occurrences one sub-line each).
   ```bash
   ./docs_tool.py check l10n --links
   ./docs_tool.py check l10n --links --page resource_groups.adoc
@@ -337,8 +330,7 @@ Needs a glossary: `--glossary PATH` (pipe-delimited `en|ru|ru_pattern|note`), or
   EN-only, then RU-only. Presence is compared, not count. Beta: RU prose that
   back-ticks a term EN left bare shows up here and usually isn't a bug — treat the
   output as a review list. Every finding carries a clickable `path:line` (first hit
-  on each side on the row, further occurrences one sub-line each) — no `--verbose`
-  needed.
+  on each side on the row, further occurrences one sub-line each).
   ```bash
   ./docs_tool.py check l10n --literals
   ./docs_tool.py check l10n --literals --page resource_groups.adoc
@@ -372,7 +364,7 @@ Needs a glossary: `--glossary PATH` (pipe-delimited `en|ru|ru_pattern|note`), or
   Findings are grouped `BROKEN` → `REDIRECT` → `UNREACHABLE`, worst first.
 
   **Collapsed to a one-line count** (the server answered, just not usefully): `401`/
-  `403` anti-bot walls, `429`s, `5xx`. `--show-unverified` (or `--verbose`) lists
+  `403` anti-bot walls, `429`s, `5xx`. `--show-unverified` lists
   those too. A `301`/`308` that only rewrites the URL cosmetically — `http`→`https`,
   ± `www.`, ± trailing slash, a dropped `#fragment`, a letter-case change — is
   treated as clean, not a `REDIRECT`.
@@ -467,10 +459,11 @@ upgrading a vendored copy doesn't break an existing hook or CI job. See the
 `--all-checks` runs everything **except `--check-links-external`** (network) — that
 one only runs when named.
 
-Dropped in the redesign, and only these: `sync --since REF`, and the `-v` / `-n`
-short aliases (spell out `--verbose` / `--dry-run`). Two silent no-ops also became
-errors — running outside a docs tree, and a `--page` that matches no file — since
-both previously reported a clean pass over nothing.
+Dropped along the way: `sync --since REF`, the `-v` / `-n` short aliases, and
+`--verbose` — every check now prints one complete output (a long per-file diff is
+capped at 30 lines; use `--page <file>` to see the rest). Two silent no-ops also
+became errors — running outside a docs tree, and a `--page` that matches no file —
+since both previously reported a clean pass over nothing.
 
 If you need the pre-redesign script itself, it's frozen on the
 [`legacy-flags`](https://github.com/andreyaksenov/docs-tool/tree/legacy-flags) branch:

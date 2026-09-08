@@ -9,7 +9,7 @@ Run from the repo root (use "python docs_tool.py ..." on Windows). Every
 check scans all discovered modules automatically.
 
 Commands:
-    ./docs_tool.py check <family> [<family> ...] [--<rule> ...] [--target NAME] [--verbose] [--page NAME ...]
+    ./docs_tool.py check <family> [<family> ...] [--<rule> ...] [--target NAME] [--page NAME ...]
                         check terms adds  [--glossary PATH ...];  check refs, [--external-root NAME=PATH ...]
                         check links adds  [--offline] [--timeout N] [--allow-domain HOST ...]
                                           [--show-unverified] [--insecure] [--link-cache PATH]
@@ -31,7 +31,7 @@ run on an explicit `check links`.
 Examples:
     ./docs_tool.py check chars
     ./docs_tool.py check style --no-yo
-    ./docs_tool.py check l10n --structure --verbose --page resource_groups.adoc
+    ./docs_tool.py check l10n --structure --page resource_groups.adoc
     ./docs_tool.py check chars markup --page UNCOMMITTED
     ./docs_tool.py check links --show-unverified
     ./docs_tool.py sync en/modules/ROOT/pages/reference/utils/analyzedb.adoc --dry-run
@@ -407,7 +407,7 @@ def _labeled_unified_diff(en_lines, ru_lines, en_label, ru_label, n=1):
 # EXAMPLES checks
 # --------------------------------------------------------------------------
 
-def check_examples_no_cyrillic(verbose=False) -> bool:
+def check_examples_no_cyrillic() -> bool:
     """Port of check_examples_no_cyrillic.sh: no Cyrillic in en/ examples
     (checked across every module)."""
     ok = True
@@ -431,7 +431,7 @@ def check_examples_no_cyrillic(verbose=False) -> bool:
     return ok
 
 
-def check_examples_orphaned(verbose=False) -> bool:
+def check_examples_orphaned() -> bool:
     """Port of check_examples_orphaned.sh: every examples/ file must be
     pulled in by an include::example$<path>[] somewhere in that module's
     pages/partials."""
@@ -492,7 +492,7 @@ def _blank_sql_comments(text: str):
     return out
 
 
-def check_examples_parity(verbose=False) -> bool:
+def check_examples_parity() -> bool:
     """Port of check_examples_parity.sh: en/ru examples must have the same
     files (per module); non-.sql files must match byte-for-byte, .sql files
     only need to match once comment-only lines are blanked out."""
@@ -527,9 +527,9 @@ def check_examples_parity(verbose=False) -> bool:
                     print(f"         {ru_file}")
                     ok = False
                     mismatch_count += 1
-                    if verbose:
-                        print("\n".join(_labeled_unified_diff(en_blanked, ru_blanked, en_file, ru_file)))
-                        print()
+                    print("\n".join(_cap_diff_lines(
+                        _labeled_unified_diff(en_blanked, ru_blanked, en_file, ru_file))))
+                    print()
                 continue
 
             en_bytes = en_file.read_bytes()
@@ -539,11 +539,11 @@ def check_examples_parity(verbose=False) -> bool:
                 print(f"         {ru_file}")
                 ok = False
                 mismatch_count += 1
-                if verbose:
-                    en_lines = (_read_text(en_file) or "").splitlines()
-                    ru_lines = (_read_text(ru_file) or "").splitlines()
-                    print("\n".join(_labeled_unified_diff(en_lines, ru_lines, en_file, ru_file)))
-                    print()
+                en_lines = (_read_text(en_file) or "").splitlines()
+                ru_lines = (_read_text(ru_file) or "").splitlines()
+                print("\n".join(_cap_diff_lines(
+                    _labeled_unified_diff(en_lines, ru_lines, en_file, ru_file))))
+                print()
 
         for ru_file in _iter_files(ru_examples):
             if skip(ru_file, ru_examples):
@@ -625,7 +625,7 @@ def _collect_used_images(lang_module_roots, lang, partial_includers):
     return used
 
 
-def check_images_orphaned(verbose=False) -> bool:
+def check_images_orphaned() -> bool:
     """Port of check_images_orphaned.sh, made resolution-aware (see
     _collect_used_images) instead of a basename-in-corpus-text match: every
     images/ file must be the actual target of some image:/image::/
@@ -680,8 +680,8 @@ _INCLUDE_PARTIAL_RE = re.compile(r'include::partial\$([^\[]+\.adoc)')
 
 def _nav_skeleton(path: Path):
     """Structural skeleton of a nav file: list depth + xref/include target,
-    or an <svg:...>/<text> placeholder. Numbered lines (1-based) for
-    --verbose lookup; caller strips the number prefix for the plain equality check."""
+    or an <svg:...>/<text> placeholder. Numbered lines (1-based) for the
+    printed diff; caller strips the number prefix for the plain equality check."""
     lines = _read_lines(path)
     if lines is None:
         return []
@@ -705,8 +705,21 @@ def _nav_skeleton(path: Path):
     return out
 
 
-# How many skeleton-diff lines to show before truncating; --verbose shows all.
-_SKELETON_DIFF_PREVIEW = 20
+# Per-file ceiling on printed finding/diff lines. A pair that diverges
+# past this isn't a line-by-line fix job -- it needs a proper re-check --
+# so the tail is summarised. Scope to the one file with --page to see all
+# of it.
+_MAX_FINDING_LINES = 30
+
+
+def _cap_diff_lines(lines):
+    """`lines` as-is if short, else the first _MAX_FINDING_LINES followed
+    by a one-line 'scope with --page' summary of the rest."""
+    if len(lines) <= _MAX_FINDING_LINES:
+        return list(lines)
+    return list(lines[:_MAX_FINDING_LINES]) + [
+        f"         ... and {len(lines) - _MAX_FINDING_LINES} more; scope to "
+        f"this file with --page to see everything"]
 
 
 def _skeleton_diff_lines(en_skel, ru_skel, en_label, ru_label):
@@ -729,7 +742,7 @@ def _skeleton_diff_lines(en_skel, ru_skel, en_label, ru_label):
     return out
 
 
-def _compare_skeleton_pair(en_file: Path, ru_file: Path, skeleton_fn, verbose) -> bool:
+def _compare_skeleton_pair(en_file: Path, ru_file: Path, skeleton_fn) -> bool:
     en_skel = skeleton_fn(en_file)
     ru_skel = skeleton_fn(ru_file)
     en_plain = [s for _, s in en_skel]
@@ -739,17 +752,12 @@ def _compare_skeleton_pair(en_file: Path, ru_file: Path, skeleton_fn, verbose) -
     print(f"DIFF     {en_file}")
     print(f"         {ru_file}")
     diff = _skeleton_diff_lines(en_skel, ru_skel, en_file, ru_file)
-    if verbose or len(diff) <= _SKELETON_DIFF_PREVIEW:
-        print("\n".join(diff))
-    else:
-        print("\n".join(diff[:_SKELETON_DIFF_PREVIEW]))
-        print(f"         ... {len(diff) - _SKELETON_DIFF_PREVIEW} more diff line(s); "
-              f"rerun with --verbose for the full diff")
+    print("\n".join(_cap_diff_lines(diff)))
     print()
     return False
 
 
-def check_nav_structure_parity(verbose=False) -> bool:
+def check_nav_structure_parity() -> bool:
     """Port of check_nav_structure_parity.sh. A module only has a nav.adoc
     of its own on some multi-module Antora sites (e.g. a top-level ROOT nav
     plus a second one for a "how-to" module); modules without one are
@@ -763,7 +771,7 @@ def check_nav_structure_parity(verbose=False) -> bool:
         if not (en_nav.is_file() and ru_nav.is_file()):
             continue
         any_nav = True
-        if not _compare_skeleton_pair(en_nav, ru_nav, _nav_skeleton, verbose):
+        if not _compare_skeleton_pair(en_nav, ru_nav, _nav_skeleton):
             ok = False
             mismatch_count += 1
 
@@ -772,7 +780,7 @@ def check_nav_structure_parity(verbose=False) -> bool:
             en_partial = en_root / "partials" / partial_name
             ru_partial = ru_root / "partials" / partial_name
             if en_partial.is_file() and ru_partial.is_file():
-                if not _compare_skeleton_pair(en_partial, ru_partial, _nav_skeleton, verbose):
+                if not _compare_skeleton_pair(en_partial, ru_partial, _nav_skeleton):
                     ok = False
                     mismatch_count += 1
 
@@ -1265,7 +1273,7 @@ def _report_skipped_components():
           "checked out locally", file=sys.stderr)
 
 
-def check_pages_broken_refs(verbose=False) -> bool:
+def check_pages_broken_refs() -> bool:
     """Port of check_pages_broken_refs.sh, extended to resolve
     component-prefixed xrefs against sibling modules of the same language
     when the component name matches a discovered module."""
@@ -1511,7 +1519,7 @@ def _collect_tag_usage(lang_module_roots, lang):
     return events
 
 
-def check_tags_orphaned(verbose=False) -> bool:
+def check_tags_orphaned() -> bool:
     """New check (not a port of an existing shell script): every
     tag::NAME[]/end::NAME[] region defined in an examples/pages/partials
     file must actually be pulled in somewhere -- directly via
@@ -1600,7 +1608,7 @@ def check_tags_orphaned(verbose=False) -> bool:
     return ok
 
 
-def check_partials_orphaned(verbose=False) -> bool:
+def check_partials_orphaned() -> bool:
     """Every partials/ file with no tag::/end:: regions at all -- content
     meant to be pulled in only as a whole file via a bare include::...[]
     -- must actually be included somewhere. The same shape of check as
@@ -1659,7 +1667,7 @@ def check_partials_orphaned(verbose=False) -> bool:
 # PAGES: line parity
 # --------------------------------------------------------------------------
 
-def check_pages_line_parity(verbose=False) -> bool:
+def check_pages_line_parity() -> bool:
     """Port of check_pages_line_parity.sh (matches `wc -l` semantics: counts
     newline characters, not logical/visual lines)."""
     ok = True
@@ -1718,7 +1726,7 @@ def _first_match_hits(lines, pattern):
             yield i, m.start() + 1, l
 
 
-def check_pages_no_cyrillic(verbose=False) -> bool:
+def check_pages_no_cyrillic() -> bool:
     """Port of check_pages_no_cyrillic.sh (en/ only, all modules)."""
     ok = True
     total_hits = 0
@@ -1762,7 +1770,7 @@ def _mark_invisible_chars(line: str) -> str:
     return _INVISIBLE_RE.sub(lambda m: f"⟦U+{ord(m.group(0)):04X}⟧", line)
 
 
-def check_pages_no_invisible_chars(verbose=False) -> bool:
+def check_pages_no_invisible_chars() -> bool:
     """New check (not a port of an existing shell script): flags zero-width
     and other invisible/formatting Unicode characters -- ZWSP, ZWNJ, ZWJ,
     word joiner, BOM, bidi control marks, and Unicode tag characters -- in
@@ -1788,8 +1796,7 @@ def check_pages_no_invisible_chars(verbose=False) -> bool:
                     for i, col, l in hits:
                         labels = ", ".join(sorted({_invisible_char_label(ch) for ch in _INVISIBLE_RE.findall(l)}))
                         print(f"  {f}:{i}:{col}: {labels}")
-                        if verbose:
-                            print(f"    {_mark_invisible_chars(l)}")
+                        print(f"    {_mark_invisible_chars(l)}")
     if ok:
         print("OK: no invisible/zero-width characters found in pages.")
     else:
@@ -1797,7 +1804,7 @@ def check_pages_no_invisible_chars(verbose=False) -> bool:
     return ok
 
 
-def check_pages_no_unicode_dashes(verbose=False) -> bool:
+def check_pages_no_unicode_dashes() -> bool:
     """Port of check_pages_no_unicode_dashes.sh (en/ and ru/, all modules)."""
     ok = True
     total_hits = 0
@@ -1826,7 +1833,7 @@ def check_pages_no_unicode_dashes(verbose=False) -> bool:
 _YO_RE = re.compile(r'[ёЁ]')
 
 
-def check_pages_no_yo(verbose=False) -> bool:
+def check_pages_no_yo() -> bool:
     """New check (not a port of an existing shell script): flags the
     letter ё/Ё in ru/ pages/partials -- house style spells it out as е
     instead, standard practice for most Russian technical writing (and
@@ -1871,7 +1878,7 @@ def _count_delimiter_backticks(line: str) -> int:
     return _PASSTHROUGH_RE.sub('', line).count('`')
 
 
-def check_pages_stray_backticks(verbose=False) -> bool:
+def check_pages_stray_backticks() -> bool:
     """New check (not a port of an existing shell script): flags lines in
     en/ru pages/partials with an odd number of backticks -- almost always a
     missing or stray ` around an inline monospace span (e.g. a trailing `
@@ -2118,7 +2125,7 @@ def _scan_delimiter_stack(line_stream):
     return unclosed
 
 
-def check_pages_unbalanced_delimiters(verbose=False) -> bool:
+def check_pages_unbalanced_delimiters() -> bool:
     """New check (not a port of an existing shell script): flags AsciiDoc
     block delimiters -- open `--`, listing `----`, literal `....`, example
     `====`, sidebar `****`, quote `____`, passthrough `++++`, table `|===`,
@@ -2248,7 +2255,7 @@ def _combined_nav_text(root: Path) -> str:
     return "\n".join(parts)
 
 
-def check_pages_orphaned(verbose=False) -> bool:
+def check_pages_orphaned() -> bool:
     """Port of check_pages_orphaned.sh, generalized for multi-module Antora
     sites: a page is considered reachable if *any* module's nav.adoc (they
     can cross-reference each other, e.g. `xref:other-module:page.adoc[]`)
@@ -2440,7 +2447,7 @@ def _structure_skeleton(path: Path):
     return out
 
 
-def check_pages_structure_parity(verbose=False) -> bool:
+def check_pages_structure_parity() -> bool:
     """Port of check_pages_structure_parity.sh."""
     ok = True
     mismatch_count = 0
@@ -2456,7 +2463,7 @@ def check_pages_structure_parity(verbose=False) -> bool:
                     ok = False
                     mismatch_count += 1
                     continue
-                if not _compare_skeleton_pair(en_file, ru_file, _structure_skeleton, verbose):
+                if not _compare_skeleton_pair(en_file, ru_file, _structure_skeleton):
                     ok = False
                     mismatch_count += 1
 
@@ -2504,21 +2511,9 @@ def _en_ru_page_pairs():
                     yield None, ru_file
 
 
-# Per-file cap on parity findings. A pair that diverges past this isn't a
-# line-by-line fix job -- it needs a proper re-translation -- so the tail
-# is summarised rather than dumped. Scope to one file with --page to see
-# all of it.
-_PARITY_ROW_CAP = 40
-
-
 def _emit_parity_rows(rows):
-    """Print one file's parity rows, capping a very long tail."""
-    if len(rows) <= _PARITY_ROW_CAP:
-        print("\n".join(rows))
-    else:
-        print("\n".join(rows[:_PARITY_ROW_CAP]))
-        print(f"         ... and more; this pair needs a full re-check "
-              f"(scope to it with --page to see everything)")
+    """Print one file's parity rows, summarising a very long tail."""
+    print("\n".join(_cap_diff_lines(rows)))
 
 
 # xref: / inline image: targets. The bracket that ends the target ("[")
@@ -2588,7 +2583,7 @@ def _parity_refs(en_file, en_lines, ru_file, ru_lines):
     return (suffix if suffix.strip() else ""), extra
 
 
-def check_pages_link_parity(verbose=False) -> bool:
+def check_pages_link_parity() -> bool:
     """EN and RU pages must reference the same things.
 
     Compares, per EN/RU page pair, the multiset of language-invariant link
@@ -2717,7 +2712,7 @@ def _pair_changed_literals(en_only, ru_only):
     return pairs
 
 
-def check_pages_literal_parity(verbose=False) -> bool:
+def check_pages_literal_parity() -> bool:
     """EN and RU pages must contain the same back-ticked literals.
 
     Compares, per EN/RU page pair, the *set* of inline monospace spans
@@ -2890,7 +2885,7 @@ def _strip_noise(line: str) -> str:
     return s
 
 
-def _check_translation_pair(en_file: Path, ru_file: Path, verbose: bool, report_header):
+def _check_translation_pair(en_file: Path, ru_file: Path, report_header):
     """Returns the number of UNTRANSLATED/SUSPECT lines flagged."""
     en_lines = _read_lines(en_file)
     ru_lines = _read_lines(ru_file)
@@ -2965,16 +2960,16 @@ def _check_translation_pair(en_file: Path, ru_file: Path, verbose: bool, report_
             if hits:
                 ensure_header()
                 finding_count += 1
-                marker = f" [{', '.join(sorted(set(hits)))}]" if verbose else ""
+                marker = f" [{', '.join(sorted(set(hits)))}]"
                 print(f"  SUSPECT       {ru_file}:{lineno}: {ru_text}{marker}")
 
     return finding_count
 
 
-def check_pages_translation(verbose=False) -> bool:
+def check_pages_translation() -> bool:
     """Port of check_pages_translation.sh. Flags RU lines byte-identical to EN
-    (UNTRANSLATED) and RU lines carrying English stopwords (SUSPECT); --verbose
-    appends the matched stopword(s) to each SUSPECT line."""
+    (UNTRANSLATED) and RU lines carrying English stopwords (SUSPECT); each
+    SUSPECT line ends with the matched stopword(s) in brackets."""
     ok = True
     total_hits = 0
 
@@ -2992,7 +2987,7 @@ def check_pages_translation(verbose=False) -> bool:
                 ru_file = ru_root / rel
                 if not ru_file.is_file():
                     continue
-                total_hits += _check_translation_pair(en_file, ru_file, verbose, report_header)
+                total_hits += _check_translation_pair(en_file, ru_file, report_header)
 
     if ok:
         print("OK: no untranslated lines detected.")
@@ -3016,8 +3011,8 @@ def check_pages_translation(verbose=False) -> bool:
 # "wiki.deb") with the same low collision risk as the original list --
 # "tar.gz" doesn't need special-casing: "tar" alone is in the list, so
 # "archive.tar.gz" already matches on "...gz6.tar" (stopping at the "tar"
-# segment, not continuing through ".gz") -- a good enough anchor for
-# --verbose to show the full line, without needing a two-extension pattern.
+# segment, not continuing through ".gz") -- a good enough anchor for the
+# printed source line, without needing a two-extension pattern.
 # xml added later: real Hadoop config files (hive-site.xml, hdfs-site.xml,
 # core-site.xml, ...) turned up ~13 times in docs-adh, almost all already
 # italicized correctly, with one confirmed miss in backticks
@@ -3313,7 +3308,7 @@ def _collect_marked_hits(pattern, text, matches):
         matches.append(f"{word} ({kind}, should be italic)")
 
 
-def check_pages_file_path_italics(verbose=False) -> bool:
+def check_pages_file_path_italics() -> bool:
     """New check (not a port of an existing shell script): flags file names
     (by a curated config/unit-file extension whitelist), directory paths
     (by well-known absolute-path prefixes), bare directory/file basenames
@@ -3357,8 +3352,7 @@ def check_pages_file_path_italics(verbose=False) -> bool:
                     print(f"FILE     {f}")
                     for i, line, matches in hits:
                         print(f"  {f}:{i}: {', '.join(matches)}")
-                        if verbose:
-                            print(f"    {line}")
+                        print(f"    {line}")
     if ok:
         print("OK: no un-italicized file/directory names found in pages.")
     else:
@@ -3411,7 +3405,7 @@ def _is_period_violation(content: str) -> bool:
             and not _ends_with_known_abbreviation(content))
 
 
-def check_pages_table_cell_periods(verbose=False) -> bool:
+def check_pages_table_cell_periods() -> bool:
     """New check (not a port of an existing shell script): house style says
     the last sentence in a table cell should not end with a period.
     Exceptions found by inspecting real tables in this doc set:
@@ -3559,7 +3553,7 @@ def _build_glossary_term_re(glossary):
     return re.compile(r'\b(?:' + '|'.join(re.escape(k) for k in keys) + r')\b', re.IGNORECASE)
 
 
-def _check_terminology_pair(en_file: Path, ru_file: Path, term_re, glossary, verbose, report_header):
+def _check_terminology_pair(en_file: Path, ru_file: Path, term_re, glossary, report_header):
     """Returns the number of glossary mismatches flagged. Walks EN/RU by
     line index -- same positional alignment _check_translation_pair uses --
     so it carries the same known limitation: if the two files have drifted
@@ -3653,14 +3647,13 @@ def _check_terminology_pair(en_file: Path, ru_file: Path, term_re, glossary, ver
             else:
                 print(f"  MISMATCH  {ru_file}:{lineno}: term '{key}' -- appears {en_count}x on the EN line "
                       f"but a translation from [{forms}] is present only {ru_count}x")
-            if verbose:
-                print(f"    EN: {en_text}")
-                print(f"    RU: {ru_text}")
+            print(f"    EN: {en_text}")
+            print(f"    RU: {ru_text}")
 
     return finding_count
 
 
-def check_pages_terminology(verbose=False) -> bool:
+def check_pages_terminology() -> bool:
     """New check (not a port of an existing shell script): flags an EN
     glossary term (see --glossary) whose aligned RU line contains its
     accepted RU translation fewer times than the EN term appears, catching a
@@ -3720,7 +3713,7 @@ def check_pages_terminology(verbose=False) -> bool:
                 ru_file = ru_root / rel
                 if not ru_file.is_file():
                     continue
-                total_hits += _check_terminology_pair(en_file, ru_file, term_re, GLOSSARY, verbose, report_header)
+                total_hits += _check_terminology_pair(en_file, ru_file, term_re, GLOSSARY, report_header)
 
     if ok:
         print("OK: no glossary terminology mismatches found.")
@@ -3804,7 +3797,7 @@ def _find_homoglyph_hits(masked: str):
     return found
 
 
-def check_pages_ru_latin_homoglyphs(verbose=False) -> bool:
+def check_pages_ru_latin_homoglyphs() -> bool:
     """New check (not a port of an existing shell script): flags Latin
     letters that look like they were meant to be Cyrillic in ru/ prose --
     the mirror image of check_pages_no_cyrillic (which only looks for
@@ -3864,8 +3857,7 @@ def check_pages_ru_latin_homoglyphs(verbose=False) -> bool:
                 print(f"FILE     {f}")
                 for i, col, tok, line in hits:
                     print(f"  {f}:{i}:{col}: {tok!r}")
-                    if verbose:
-                        print(f"    {line}")
+                    print(f"    {line}")
     if ok:
         print("OK: no Latin/Cyrillic homoglyph mix-ups found in ru/ pages.")
     else:
@@ -4310,7 +4302,7 @@ def _save_link_cache(cache):
         pass
 
 
-def check_links_external(verbose=False) -> bool:
+def check_links_external() -> bool:
     """Fetch every http(s) link in pages/ and partials/ (both languages).
 
     Printed line by line:
@@ -4323,7 +4315,7 @@ def check_links_external(verbose=False) -> bool:
     UNREACHABLE / VPN? don't fail the run -- re-run behind a VPN to tell a
     dead link from a blocked route. Collapsed to a one-line count (the
     server answered, just not usefully): 401/403 anti-bot walls, 429s, 5xx.
-    --show-unverified (or --verbose) lists those too.
+    --show-unverified lists those too.
 
     Only BROKEN fails the run. Links are de-duplicated site-wide (one fetch
     per distinct URL, at most a few concurrent per host). Every run is fresh
@@ -4377,9 +4369,8 @@ def check_links_external(verbose=False) -> bool:
               f"(--offline: not fetched):\n")
         for url in sorted(sites):
             print(f"  {url}")
-            if verbose:
-                for f, ln in sites[url]:
-                    print(f"        {f}:{ln}")
+            for f, ln in sites[url]:
+                print(f"        {f}:{ln}")
         return True
 
     cache = _load_link_cache()
@@ -4421,7 +4412,7 @@ def check_links_external(verbose=False) -> bool:
     # Shown line-by-line: things you act on in the source (BROKEN, REDIRECT)
     # and things you'd re-test behind a VPN (UNREACHABLE, VPN?).
     # Collapsed to a count: the server answered, just not usefully -- 403
-    # anti-bot walls, 429s, 5xx. --show-unverified / --verbose lists those.
+    # anti-bot walls, 429s, 5xx. --show-unverified lists those.
     # Worst first: dead links you must fix, then redirects to update, then
     # the couldn't-reach list. URL-sorted within each group.
     _ORDER = {"BROKEN": 0, "REDIRECT": 1, "UNREACHABLE": 2, "VPN?": 2}
@@ -4435,11 +4426,8 @@ def check_links_external(verbose=False) -> bool:
 
     def _print_hit(label, detail, url):
         print(f"{label:<11} {url}  ({detail})")
-        refs = sites[url]
-        for f, ln in (refs if verbose else refs[:3]):
+        for f, ln in sites[url]:
             print(f"        {f}:{ln}")
-        if not verbose and len(refs) > 3:
-            print(f"        ... and {len(refs) - 3} more (--verbose for all)")
 
     prev = None
     for label, detail, url in shown:
@@ -4448,7 +4436,7 @@ def check_links_external(verbose=False) -> bool:
         _print_hit(label, detail, url)
         prev = label
 
-    show_collapsed = verbose or LINK_SHOW_UNVERIFIED
+    show_collapsed = LINK_SHOW_UNVERIFIED
     if collapsed and show_collapsed:
         if shown:
             print()
@@ -4771,11 +4759,6 @@ _RULES_IGNORING_PAGE = {
     "examples-no-cyrillic", "examples-parity", "nav-structure-parity",
     "pages-broken-refs", "pages-orphaned", "examples-orphaned", "images-orphaned",
 }
-_RULES_WITH_VERBOSE = {
-    "pages-no-invisible-chars", "pages-ru-latin-homoglyphs", "pages-structure-parity",
-    "pages-translation", "examples-parity", "nav-structure-parity",
-    "pages-file-path-italics", "pages-terminology", "links-external",
-}
 _RULES_WITH_EXTERNAL_ROOT = {
     "pages-unbalanced-delimiters", "pages-broken-refs", "partials-orphaned",
     "images-orphaned", "tags-orphaned",
@@ -4811,10 +4794,6 @@ def _rule_examples(key):
             _family_of(_rule_of(key)), {_rule_of(key)}, tgt)[0])
         rest = "another --target" if len(siblings) > 1 else f"over {tgt}/"
         out.append((f"./docs_tool.py {other}", rest))
-    if key in _RULES_WITH_VERBOSE:
-        vlabel = ("every referencing page + the 403/429/5xx list"
-                  if key == "links-external" else "full diff / per-hit detail")
-        out.append((f"./docs_tool.py {cmd} --verbose", vlabel))
     if key == "pages-terminology":
         out.append((f"./docs_tool.py {cmd} --glossary my-glossary.psv",
                     "explicit glossary (else *-glossary.psv)"))
@@ -5602,9 +5581,6 @@ def build_parser():
     parser.add_argument("--list-checks", action="store_true", help="List available --check-* flags and exit.")
     parser.add_argument("--list-modules", action="store_true",
                         help="List every discovered module (under en/modules/ and ru/modules/) and exit.")
-    parser.add_argument("--verbose", action="store_true",
-                        help="Verbose mode: show full diffs on the parity checks (instead of "
-                             "a truncated preview) and per-hit detail on the heuristic checks.")
     page_action = parser.add_argument("--page", action="append", metavar="NAME",
                         help="Limit the per-file en/ru checks (translation, line-parity, "
                              "structure-parity, link-parity, literal-parity, no-cyrillic, "
@@ -5738,7 +5714,7 @@ def _apply_page_filter(page_args):
     _reject_unmatched_page_filters(page_args)
 
 
-def _run_selected(selected, verbose, glossary_paths, legacy_headers=False):
+def _run_selected(selected, glossary_paths, legacy_headers=False):
     """Run an ordered list of CHECKS keys, printing a header between them
     when more than one is selected. Loads the glossary lazily if a
     terminology check is in the set. Returns True if every check passed."""
@@ -5770,7 +5746,7 @@ def _run_selected(selected, verbose, glossary_paths, legacy_headers=False):
             header = f"--check-{name}" if legacy_headers else \
                 f"{RULE_IDS[name]}  {_check_command(name)}"
             print(f"=== {header} ===")
-        if not CHECKS[name](verbose=verbose):
+        if not CHECKS[name]():
             overall_ok = False
     return overall_ok
 
@@ -5825,7 +5801,7 @@ def _main_legacy():
     _require_a_docs_tree()
     _apply_page_filter(args.page)
 
-    overall_ok = _run_selected(selected, args.verbose, args.glossary, legacy_headers=True)
+    overall_ok = _run_selected(selected, args.glossary, legacy_headers=True)
     sys.exit(0 if overall_ok else 1)
 
 
@@ -5896,9 +5872,6 @@ def _build_v2_parser():
                    choices=_SCAN_TARGETS + ("all",),
                    help="Restrict to one scan target: %s, or 'all' "
                         "(default: pages)." % ", ".join(_SCAN_TARGETS))
-    c.add_argument("--verbose", action="store_true",
-                   help="Full diffs / per-hit detail on the heuristic checks; for "
-                        "'check links', every referencing page plus the 403/429/5xx list.")
     pa = c.add_argument("--page", action="append", metavar="NAME",
                         help="Limit per-file EN/RU checks to matching page(s)/"
                              "partial(s); 'UNCOMMITTED' for the current git diff. "
@@ -6125,7 +6098,7 @@ def _main_v2():
     _require_a_docs_tree()
     _apply_page_filter(args.page)
 
-    ok = _run_selected(selected, args.verbose, glossary)
+    ok = _run_selected(selected, glossary)
     sys.exit(0 if ok else 1)
 
 
@@ -6143,7 +6116,7 @@ def main():
         return _main_legacy()
     argv = sys.argv[1:]
     # No args, top-level --help, or a subcommand -> the current surface.
-    # A legacy flag (--check-*, --all-checks, --list-*, --sync, --verbose ...) -> legacy.
+    # A legacy flag (--check-*, --all-checks, --list-*, --sync ...) -> legacy.
     if not argv or argv[0] in _V2_VERBS or argv[0] in ("-h", "--help"):
         return _main_v2()
     return _main_legacy()

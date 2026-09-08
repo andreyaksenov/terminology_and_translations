@@ -1285,9 +1285,9 @@ class PagesTranslationTests(FixtureTestCase):
         ok, output = self.run_check(dt.check_pages_translation)
         self.assertTrue(ok, output)
 
-    def test_stopword_flagging_is_always_on(self):
+    def test_stopword_flagging_names_the_matched_word(self):
         """A leftover English stopword inside otherwise-Russian text is
-        flagged on a plain run; --verbose only appends the matched word."""
+        flagged, and the SUSPECT line ends with the matched word."""
         self.write(
             "en/modules/ROOT/pages/page.adoc",
             "This paragraph explains the new caching behavior in detail.\n",
@@ -1296,12 +1296,7 @@ class PagesTranslationTests(FixtureTestCase):
             "ru/modules/ROOT/pages/page.adoc",
             "Этот абзац объясняет and новое поведение кэширования.\n",
         )
-        ok, output = self.run_check(dt.check_pages_translation, verbose=False)
-        self.assertFalse(ok)
-        self.assertIn("SUSPECT", output)
-        self.assertNotIn("[and]", output)
-
-        ok, output = self.run_check(dt.check_pages_translation, verbose=True)
+        ok, output = self.run_check(dt.check_pages_translation)
         self.assertFalse(ok)
         self.assertIn("SUSPECT", output)
         self.assertIn("[and]", output)
@@ -1786,8 +1781,7 @@ class PagesLinkParityTests(FixtureTestCase):
         ok, out = self.run_check(dt.check_pages_link_parity)
         self.assertFalse(ok)
         self.assertIn("xref:vacuum.adoc", out)
-        # a clickable path:line without --verbose
-        self.assertIn("en/modules/ROOT/pages/page.adoc:1", out)
+        self.assertIn("en/modules/ROOT/pages/page.adoc:1", out)  # clickable ref
 
     def test_translated_xref_fragment_is_not_a_finding(self):
         """Antora derives a section anchor from the (translated) heading,
@@ -1846,7 +1840,7 @@ class PagesLiteralParityTests(FixtureTestCase):
         ok, out = self.run_check(dt.check_pages_literal_parity)
         self.assertFalse(ok)
         self.assertIn("`SELECT`", out)
-        self.assertIn("en/modules/ROOT/pages/page.adoc:1", out)  # clickable, no --verbose
+        self.assertIn("en/modules/ROOT/pages/page.adoc:1", out)  # clickable ref
 
     def test_trailing_parens_are_normalized(self):
         self.write("en/modules/ROOT/pages/page.adoc", "Call `get_part_name()`.\n")
@@ -2260,9 +2254,9 @@ class RuleExampleTests(unittest.TestCase):
         self.assertFalse(any("--page" in c for c, _ in self._examples("RF01")))
         self.assertTrue(any("--page" in c for c, _ in self._examples("ST01")))
 
-    def test_verbose_example_only_where_verbose_does_something(self):
-        self.assertTrue(any("--verbose" in c for c, _ in self._examples("LN02")))
-        self.assertFalse(any("--verbose" in c for c, _ in self._examples("CH04")))
+    def test_no_example_mentions_verbose(self):
+        for key in dt.CHECKS:
+            self.assertFalse(any("--verbose" in c for c, _ in dt._rule_examples(key)), key)
 
     def test_glossary_example_only_on_terms(self):
         self.assertTrue(any("--glossary" in c for c, _ in self._examples("TM01")))
@@ -2352,42 +2346,28 @@ class RuleFlagMetadataTests(unittest.TestCase):
                         return True
             return False
 
-        def uses_verbose(fn, seen=None):
-            seen = seen or set()
-            if fn in seen or fn not in fns:
-                return False
-            seen.add(fn)
-            for n in ast.walk(fns[fn]):
-                if isinstance(n, ast.Name) and n.id == "verbose" \
-                        and not isinstance(getattr(n, "ctx", None), ast.Store):
-                    return True
-                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
-                    for v in list(n.args) + [k.value for k in (n.keywords or [])]:
-                        if isinstance(v, ast.Name) and v.id == "verbose":
-                            return True
-            return False
-
-        ignores_page, has_verbose, uses_ext = set(), set(), set()
+        ignores_page, uses_ext = set(), set()
         for key, fn in dt.CHECKS.items():
             name = fn.__name__
             if not calls(name, {"_page_allowed"}):
                 ignores_page.add(key)
-            if uses_verbose(name):
-                has_verbose.add(key)
             if calls(name, {"_resolve_module_ref"}):
                 uses_ext.add(key)
-        return ignores_page, has_verbose, uses_ext
+        return ignores_page, uses_ext
 
-    def test_page_verbose_and_external_root_sets_match_the_code(self):
-        ignores_page, has_verbose, uses_ext = self._analyse()
+    def test_page_and_external_root_sets_match_the_code(self):
+        ignores_page, uses_ext = self._analyse()
         self.assertEqual(dt._RULES_IGNORING_PAGE, ignores_page)
-        self.assertEqual(dt._RULES_WITH_VERBOSE, has_verbose)
         self.assertEqual(dt._RULES_WITH_EXTERNAL_ROOT, uses_ext)
 
     def test_sets_only_name_real_checks(self):
-        for s in (dt._RULES_IGNORING_PAGE, dt._RULES_WITH_VERBOSE,
-                  dt._RULES_WITH_EXTERNAL_ROOT):
+        for s in (dt._RULES_IGNORING_PAGE, dt._RULES_WITH_EXTERNAL_ROOT):
             self.assertLessEqual(s, set(dt.CHECKS))
+
+    def test_no_check_takes_a_verbose_param(self):
+        import inspect
+        for key, fn in dt.CHECKS.items():
+            self.assertNotIn("verbose", inspect.signature(fn).parameters, key)
 
 
 class NoDocsTreeTests(unittest.TestCase):
