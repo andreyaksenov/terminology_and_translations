@@ -2505,7 +2505,7 @@ def check_pages_structure_parity() -> bool:
     if ok:
         print("OK: en/ru structure matches for all compared files.")
     else:
-        print(f"\nTotal: {mismatch_count} mismatch(es).")
+        print(f"\nTotal: {mismatch_count} mismatched file(s).")
     return ok
 
 
@@ -2648,8 +2648,7 @@ def check_pages_link_parity() -> bool:
         ru_c = Counter({k: len(v) for k, v in ru_hits.items()})
         if en_c == ru_c:
             continue
-        print(f"DIFF     {en_file}")
-        print(f"         {ru_file}")
+        print(_diff_pair_header(en_file, ru_file))
         rows = []
         for t in sorted(set(en_c) | set(ru_c)):
             if en_c[t] == ru_c[t]:
@@ -2779,8 +2778,7 @@ def check_pages_literal_parity() -> bool:
         if not en_only and not ru_only:
             continue
         changed = _pair_changed_literals(en_only, ru_only)
-        print(f"DIFF     {en_file}")
-        print(f"         {ru_file}")
+        print(_diff_pair_header(en_file, ru_file))
         rows = []
         for a, b in changed:
             suffix, extra = _parity_refs(en_file, en_hits[a], ru_file, ru_hits[b])
@@ -3780,8 +3778,8 @@ def check_pages_terminology() -> bool:
     if neither is available, since that's a misconfiguration, not "nothing
     to check"."""
     if not GLOSSARY:
-        _usage_error("error: --check-pages-terminology requires --glossary PATH "
-                  "(no *-glossary.psv found in the current directory to default to either)")
+        _usage_error("error: 'check terms' needs a glossary -- pass --glossary PATH "
+                     "(no *-glossary.psv in the current directory to default to)")
 
     term_re = _build_glossary_term_re(GLOSSARY)
     ok = True
@@ -4672,14 +4670,14 @@ FAMILIES = {
     "terms": {                        # L4 -- controlled vocabulary (glossary)
         "terminology": {"pages": "pages-terminology"},
     },
-    "l10n": {                         # L5 -- "RU mirrors EN"
+    "l10n": {                         # L5 -- "RU mirrors EN"  (kept in LN## order)
         "lines":        {"pages": "pages-line-parity"},
         "structure":    {"pages": "pages-structure-parity"},
-        "links":        {"pages": "pages-link-parity"},
-        "literals":     {"pages": "pages-literal-parity"},
         "untranslated": {"pages": "pages-translation"},
         "examples":     {"examples": "examples-parity"},
         "nav":          {"nav": "nav-structure-parity"},
+        "links":        {"pages": "pages-link-parity"},
+        "literals":     {"pages": "pages-literal-parity"},
     },
     "links": {                        # L6 -- the open web (network; runs only when named)
         "external": {"pages": "links-external"},
