@@ -226,6 +226,7 @@ Always scans the whole site. `--page` only narrows *which files are reported* fo
 
   ```bash
   ./docs_tool.py check refs --orphaned
+  ./docs_tool.py check refs --orphaned --target images
   ./docs_tool.py check refs --orphaned --target tags
   ./docs_tool.py check refs --orphaned --target partials \
     --external-root ADB=../docs-adb --external-root ADH=../docs-adh
