@@ -3448,8 +3448,8 @@ def check_pages_table_cell_periods() -> bool:
     - a cell containing a NOTE/TIP/WARNING/IMPORTANT/CAUTION admonition
       (either the `LABEL: text` one-liner or a `[LABEL]`/`====` block),
       since that marks the content as not just a plain descriptive sentence;
-    - a single space-free abbreviation like `Мин.`/`Макс.` (see
-      _is_abbreviation_like).
+    - a single space-free abbreviation like `Мин.`/`Макс.` (the period is
+      part of the abbreviation, not sentence-ending punctuation).
 
     The admonition exception cuts the other way for the prose *before* a
     trailing admonition (any of the five types): that paragraph is no longer
@@ -3749,34 +3749,32 @@ def check_pages_terminology() -> bool:
     than once and only some mentions were translated correctly.
 
     An EN term is located via a longest-first regex alternation over every
-    glossary key (see _build_glossary_term_re). Whether the RU line "has the
-    right translation" is then decided entirely by the glossary author's own
-    ru_pattern column, not a guessed heuristic: each pattern is a set of
-    word tokens (see _compile_glossary_pattern), a `word<>` one matching
-    that stem plus any suffix (declension/conjugation-tolerant) and a bare
-    `word` one requiring that exact word -- e.g. a do-not-translate entry's
-    pattern is just the EN term's own words, all bare, so it's effectively
-    required verbatim. All tokens in a pattern must be found somewhere in
-    the RU line (any order) for that pattern to count as a match; an entry
-    is credited once per full set of its pattern tokens the line can form
-    (see _glossary_entry_ru_count), and that count is compared against how
-    many times the EN term occurs on the aligned line. This still can't
-    tell "right words in an unrelated sentence" from a real match, and the
-    repeat comparison additionally trips on Russian's habit of not
+    glossary key. Whether the RU line "has the right translation" is then
+    decided entirely by the glossary author's own ru_pattern column, not a
+    guessed heuristic: each pattern is a set of word tokens, a `word<>` one
+    matching that stem plus any suffix (declension/conjugation-tolerant)
+    and a bare `word` one requiring that exact word -- e.g. a
+    do-not-translate entry's pattern is just the EN term's own words, all
+    bare, so it's effectively required verbatim. All tokens in a pattern
+    must be found somewhere in the RU line (any order) for that pattern to
+    count as a match; an entry is credited once per full set of its
+    pattern tokens the line can form, and that count is compared against
+    how many times the EN term occurs on the aligned line. This still
+    can't tell "right words in an unrelated sentence" from a real match,
+    and the repeat comparison additionally trips on Russian's habit of not
     repeating a noun it already named, so it's deliberately biased toward
     fewer false positives at the cost of some missed drift -- same "beta,
     review list" tradeoff as this file's other heuristic checks.
 
     Two glossary rows sharing an EN key (e.g. the two "session" senses) are
-    merged by _load_glossary into one set of alternative patterns, so either
-    translation counts as correct -- a bare EN term match can't tell the
-    senses apart, so this deliberately doesn't try.
+    merged into one set of alternative patterns, so either translation
+    counts as correct -- a bare EN term match can't tell the senses apart,
+    so this deliberately doesn't try.
 
     Requires --glossary PATH (repeatable) -- or, if omitted, at least one
-    *-glossary.psv file discoverable in the current directory (see
-    _discover_default_glossaries, wired up in main()); exits with an error
-    if neither is available, since that's a misconfiguration, not "nothing
-    to check"."""
+    *-glossary.psv file discoverable in the current directory; exits with
+    an error if neither is available, since that's a misconfiguration, not
+    "nothing to check"."""
     if not GLOSSARY:
         _usage_error("error: 'check terms' needs a glossary -- pass --glossary PATH "
                      "(no *-glossary.psv in the current directory to default to)")
