@@ -5664,7 +5664,13 @@ if argcomplete:
                     if flag.startswith(cword_prefix) and flag not in comps:
                         comps.append(flag)
                         primary = targets.get("pages") or next(iter(targets.values()))
-                        self._display_completions[flag] = SUMMARIES.get(primary, "")
+                        # RULE_FLAGS, not SUMMARIES: --orphaned's SUMMARIES text
+                        # ("every pages/*.adoc reachable from some nav.adoc") is
+                        # true only for the default target and actively wrong
+                        # once --target images/tags is added (same reason
+                        # _rules_table() uses RULE_FLAGS for this row in --help).
+                        self._display_completions[flag] = (
+                            RULE_FLAGS.get(primary) or SUMMARIES.get(primary, ""))
             return comps
 else:
     _CheckCompletionFinder = None
