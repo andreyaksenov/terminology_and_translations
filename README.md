@@ -286,7 +286,8 @@ Needs a glossary: `--glossary PATH` (pipe-delimited `en|ru|ru_pattern|note`), or
 
 - **`LN02` · `check l10n --structure`** · beta — EN/RU structural skeletons
   (headings, blocks, `include::`) must match, catching drift when line counts don't.
-  Prints the diff, capped at 30 lines per file (`--page <file>` for the rest).
+  Prints the diff, capped at 30 lines per file — past that it's not a line-by-line
+  fix job, open the two files and reconcile them.
   ```bash
   ./docs_tool.py check l10n --structure
   ./docs_tool.py check l10n --structure --page resource_groups.adoc
@@ -467,9 +468,10 @@ one only runs when named.
 
 Dropped along the way: `sync --since REF`, the `-v` / `-n` short aliases, and
 `--verbose` — every check now prints one complete output (a long per-file diff is
-capped at 30 lines; use `--page <file>` to see the rest). Two silent no-ops also
-became errors — running outside a docs tree, and a `--page` that matches no file —
-since both previously reported a clean pass over nothing.
+capped at 30 lines, past which it's an "open the two files" job, not a `--page`
+one). Two silent no-ops also became errors — running outside a docs tree, and a
+`--page` that matches no file — since both previously reported a clean pass over
+nothing.
 
 If you need the pre-redesign script itself, it's frozen on the
 [`legacy-flags`](https://github.com/andreyaksenov/docs-tool/tree/legacy-flags) branch:
