@@ -4870,16 +4870,14 @@ def _rule_examples(key):
     if key not in _RULES_IGNORING_PAGE:
         out.append((f"./docs_tool.py {cmd} --page resource_groups.adoc",
                     "one page, a directory, or UNCOMMITTED"))
-    siblings = _sibling_targets(key)
-    if siblings:
-        # One representative --target line. refs --orphaned has four siblings;
-        # listing each would bury the flags that are actually specific to this
-        # rule under near-identical repetition.
-        tgt = siblings[0]
+    # One line per sibling target, named outright -- e.g. refs --orphaned's
+    # four (partials/examples/images/tags) each get their own row. A vague
+    # "another --target" here is exactly what leaves "how do I check
+    # orphaned images" undiscoverable from `show orphaned`.
+    for tgt in _sibling_targets(key):
         other = _check_command(_resolve_family_selection(
             _family_of(_rule_of(key)), {_rule_of(key)}, tgt)[0])
-        rest = "another --target" if len(siblings) > 1 else f"over {tgt}/"
-        out.append((f"./docs_tool.py {other}", rest))
+        out.append((f"./docs_tool.py {other}", f"over {tgt}/"))
     if key == "pages-terminology":
         out.append((f"./docs_tool.py {cmd} --glossary my-glossary.psv",
                     "explicit glossary (else *-glossary.psv)"))

@@ -2339,16 +2339,16 @@ class RuleExampleTests(unittest.TestCase):
         for rid in ("CH01", "LN02", "RF01"):
             self.assertFalse(any("--glossary" in c for c, _ in self._examples(rid)), rid)
 
-    def test_sibling_targets_are_summarised_not_enumerated(self):
-        """refs --orphaned has four sibling targets. One representative line
-        stands in for all of them -- four near-identical rows would bury the
-        flags that are actually specific to this rule. Asserted by counting
-        examples, not by matching the wording."""
-        ex = self._examples("RF06")
-        self.assertEqual(len(dt._sibling_targets(dt._ID_TO_KEY["RF06"])), 4)
-        others = [c for c, _ in ex
-                  if "--orphaned" in c and "--target tags" not in c]
-        self.assertEqual(len(others), 1, others)
+    def test_sibling_targets_are_each_named_outright(self):
+        """refs --orphaned (RF02) has four sibling targets (partials/
+        examples/images/tags) -- each gets its own example line, by name.
+        A vague "another --target" here is exactly what left "how do I
+        check orphaned images" undiscoverable from `show orphaned`."""
+        ex = self._examples("RF02")
+        siblings = dt._sibling_targets(dt._ID_TO_KEY["RF02"])
+        self.assertEqual(set(siblings), {"partials", "examples", "images", "tags"})
+        for tgt in siblings:
+            self.assertTrue(any(f"--target {tgt}" in c for c, _ in ex), tgt)
 
     def test_single_sibling_target_is_named_outright(self):
         """With only one alternative there is nothing to summarise, so CH01
